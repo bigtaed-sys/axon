@@ -11,44 +11,82 @@ let connections: ConnectionManager | null = null;
 let startupError: string | null = null;
 
 /**
- * Меню правки — без него не работает вставка.
+ * Правка в полях ввода: вставка, копирование, отмена.
  *
- * В Electron горячие клавиши правки живут не в поле ввода, а в меню
- * приложения: Ctrl+V, Ctrl+C, Ctrl+A и Ctrl+Z существуют ровно постольку,
- * поскольку в меню есть пункты с соответствующими ролями. Приложение без
- * меню выглядит обычным, пока человек не попробует вставить в поле пароль
- * или ключ — и не сможет. Ввести руками длинный токен не предложишь.
+ * В Electron это не даётся само. Горячие клавиши правки живут в меню
+ * приложения, а у нас своя полоса заголовка (`titleBarStyle: 'hidden'`) —
+ * значит, на Windows строки меню нет вовсе, и вешать ускорители не на что.
+ * Снаружи это выглядит как сломанное поле: набрать можно, вставить нельзя.
+ * Длинный токен руками не набирают.
  *
- * Само меню при этом не показывается: полоса заголовка у нас своя, и
- * системная строка меню в неё не вписывается. Скрытая полоса ускорителей не
- * отменяет — это разные вещи.
+ * Поэтому на macOS оставляем настоящее меню — там оно и положено, и работает,
+ * — а на Windows и Linux перехватываем клавиши сами. Разводить их обязательно:
+ * если сработают оба пути, вставка случится дважды.
  */
-function installEditMenu(): void {
-  Menu.setApplicationMenu(
-    Menu.buildFromTemplate([
-      { role: 'editMenu' },
-      // Перезагрузка и инструменты разработчика: в собранном приложении
-      // единственный способ посмотреть, что случилось в окне.
-      {
-        label: 'Вид',
-        submenu: [
-          { role: 'reload' },
-          { role: 'forceReload' },
-          { role: 'toggleDevTools' },
-          { type: 'separator' },
-          { role: 'resetZoom' },
-          { role: 'zoomIn' },
-          { role: 'zoomOut' },
-        ],
-      },
-    ]),
-  );
+function installEditing(target: BrowserWindow): void {
+  if (process.platform === 'darwin') {
+    Menu.setApplicationMenu(
+      Menu.buildFromTemplate([
+        { role: 'appMenu' },
+        { role: 'editMenu' },
+        { role: 'viewMenu' },
+        { role: 'windowMenu' },
+      ]),
+    );
+  } else {
+    // Меню нет — и не должно быть: пустая строка над своим заголовком.
+    Menu.setApplicationMenu(null);
+    installShortcuts(target);
+  }
+
+  installContextMenu(target);
+}
+
+/**
+ * Свой разбор Ctrl+V и соседей.
+ *
+ * `before-input-event` приходит до того, как окно решит, что делать с
+ * клавишей, и не зависит ни от меню, ни от рамки окна. Вызываем методы
+ * `webContents`, а не подсовываем текст в поле: они работают с настоящим
+ * буфером обмена и с любым полем, включая те, что ещё не написаны.
+ */
+function installShortcuts(target: BrowserWindow): void {
+  target.webContents.on('before-input-event', (_event, input) => {
+    if (input.type !== 'keyDown') return;
+    if (!input.control && !input.meta) return;
+    if (input.alt) return;
+
+    const contents = target.webContents;
+    switch (input.key.toLowerCase()) {
+      case 'v':
+        contents.paste();
+        break;
+      case 'c':
+        contents.copy();
+        break;
+      case 'x':
+        contents.cut();
+        break;
+      case 'a':
+        contents.selectAll();
+        break;
+      case 'z':
+        if (input.shift) contents.redo();
+        else contents.undo();
+        break;
+      case 'y':
+        contents.redo();
+        break;
+      default:
+        return;
+    }
+  });
 }
 
 /**
  * Правая кнопка в поле ввода.
  *
- * Своего контекстного меню Electron не рисует вовсе, и это второй способ,
+ * Своего контекстного меню Electron не рисует вовсе, а это второй способ,
  * которым человек пытается вставить текст. Не найдя ни горячей клавиши, ни
  * правой кнопки, он решает, что поле сломано, — и будет прав.
  */
@@ -89,8 +127,7 @@ function createWindow(): void {
     },
   });
 
-  window.setMenuBarVisibility(false);
-  installContextMenu(window);
+  installEditing(window);
 
   window.once('ready-to-show', () => window?.show());
 
@@ -151,8 +188,6 @@ app.on('second-instance', () => {
 });
 
 app.whenReady().then(async () => {
-  installEditMenu();
-
   try {
     connections = new ConnectionManager(app.getPath('userData'));
   } catch (e) {
