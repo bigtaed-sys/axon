@@ -1,0 +1,14 @@
+{
+  "id": "echo",
+  "name": "Эхо",
+  "description": "Тестовый плагин: возвращает то, что ему дали",
+  "version": "1.0.0",
+  "api": 1,
+  "main": "./index.js",
+  "permissions": ["journal"],
+  "settings": [
+    { "key": "prefix", "label": "Приставка", "type": "text", "default": "эхо" },
+    { "key": "token", "label": "Секрет", "type": "secret", "required": false }
+  ],
+  "skills": "./skills"
+}

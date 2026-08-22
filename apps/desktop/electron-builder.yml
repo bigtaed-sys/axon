@@ -1,0 +1,78 @@
+# Сборка инсталляторов Axon.
+#
+# Приложение и ядро упаковываются вместе, но остаются разными программами:
+# ядро кладётся в ресурсы отдельной папкой и запускается своим процессом,
+# который переживает выход приложения. Из-за этого его нельзя вшивать в asar —
+# node не умеет запускать файл из архива.
+
+appId: dev.axon.desktop
+productName: Axon
+copyright: Axon
+
+# Задано явно: electron поднят в node_modules корня монорепы, а сборщик ищет
+# его рядом с приложением и без подсказки не находит.
+electronVersion: 33.4.11
+
+directories:
+  output: release
+  buildResources: build
+
+# Собранное приложение: главный процесс, рендерер и мост.
+#
+# node_modules исключены целиком, и это не оптимизация ради размера. Рендерер
+# Vite собирает в один бандл, а главный процесс не требует ничего, кроме самого
+# Electron и встроенных модулей Node. Без этого исключения сборщик кладёт в
+# архив все зависимости из package.json — react, mermaid, katex — вторым
+# экземпляром: полтораста мегабайт кода, который никогда не будет прочитан.
+files:
+  - dist/**/*
+  - package.json
+  - '!node_modules/**/*'
+
+# Ядро — самодостаточная папка, собранная build/stage-core.mjs. Именно её
+# ищет LocalCore.resolveCli по пути resources/daemon/cli.js.
+extraResources:
+  - from: build/daemon
+    to: daemon
+
+# Мусор, который иначе уезжает в установщик вместе с зависимостями.
+asarUnpack: []
+compression: maximum
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.png
+  # Подписи нет: сертификат стоит денег и требует юридического лица. Пока её
+  # нет, SmartScreen будет ругаться на первых загрузках — об этом честно
+  # написано в README, а не спрятано.
+  signAndEditExecutable: true
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Axon
+  # Ядро может остаться работать после закрытия приложения — его надо
+  # остановить, иначе установщик не сможет заменить файлы.
+  deleteAppDataOnUninstall: false
+
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  icon: build/icon.png
+  category: public.app-category.productivity
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+  icon: build/icon.png
+  category: Utility
+  synopsis: Персональный AI-агент, который живёт на вашей машине

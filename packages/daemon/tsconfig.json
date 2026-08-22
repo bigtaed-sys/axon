@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    // Код собирает esbuild — в тот же dist. Если бы tsc клал туда ещё и свои
+    // модули, они бы затирали бандл через раз, и в рантайме оказывалась бы
+    // сборка от предыдущего запуска. Разводим по расширениям: tsc — только
+    // объявления типов, esbuild — только .js.
+    "emitDeclarationOnly": true
+  },
+  "include": ["src/**/*.ts"],
+  "references": [{ "path": "../protocol" }, { "path": "../core" }]
+}

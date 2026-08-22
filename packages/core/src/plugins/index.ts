@@ -1,0 +1,13 @@
+export { PluginHost, PluginError } from './PluginHost.js';
+export type { PluginHostOptions } from './PluginHost.js';
+export { LoadedPlugin, settingKey } from './LoadedPlugin.js';
+export { PluginProcess, resolveHostScript } from './PluginProcess.js';
+export type { LogLine } from './PluginProcess.js';
+export { startPluginHost, PLUGIN_API_VERSION } from './host.js';
+export { readManifest, looksLikePlugin, ManifestError, MANIFEST_FILE } from './manifest.js';
+export { CATALOG, catalogEntry } from './catalog.js';
+export { install, InstallError } from './install.js';
+export type { InstallResult } from './install.js';
+export { RpcPeer, RpcError } from './rpc.js';
+export type { RpcFrame } from './rpc.js';
+export type * from './api.js';

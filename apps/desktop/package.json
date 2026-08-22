@@ -1,0 +1,46 @@
+{
+  "name": "@axon/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "comment:productName": "Отсюда Electron берёт имя приложения, а значит и папку данных. Без него данные легли бы в %APPDATA%/@axon/desktop — путь со служебным символом, который человек видит и не понимает.",
+  "productName": "Axon",
+  "description": "Axon — персональный AI-агент: ядро на своей машине, клиенты подключаются к нему",
+  "comment:type": "CommonJS — Electron не грузит ESM-точку входа с импортом 'electron'. Рендерер это не задевает: его собирает Vite.",
+  "type": "commonjs",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "build": "npm run build:main && npm run build:renderer",
+    "build:main": "tsc -p tsconfig.main.json",
+    "build:renderer": "vite build",
+    "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:electron\"",
+    "dev:renderer": "vite",
+    "dev:electron": "npm run build:main && wait-on tcp:5173 && cross-env AXON_DEV_SERVER=http://localhost:5173 electron .",
+    "start": "electron .",
+    "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
+    "icon": "node build/make-icon.mjs",
+    "stage:core": "node build/stage-core.mjs",
+    "dist": "npm run build && npm run icon && npm run stage:core && electron-builder",
+    "dist:dir": "npm run build && npm run icon && npm run stage:core && electron-builder --dir"
+  },
+  "dependencies": {
+    "@axon/client-sdk": "*",
+    "@axon/protocol": "*",
+    "bootstrap-icons": "^1.13.1",
+    "clsx": "^2.1.1",
+    "highlight.js": "^11.11.1",
+    "katex": "^0.16.47",
+    "mermaid": "^11.16.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
+    "rehype-highlight": "^7.0.2",
+    "rehype-katex": "^7.0.1",
+    "rehype-raw": "^7.0.0",
+    "rehype-sanitize": "^6.0.0",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0"
+  },
+  "author": {
+    "name": "Axon"
+  }
+}

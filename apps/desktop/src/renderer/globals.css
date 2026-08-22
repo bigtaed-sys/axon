@@ -1,0 +1,408 @@
+@import 'bootstrap-icons/font/bootstrap-icons.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =====================================================================
+   Темы. Значения — RGB-тройки, чтобы Tailwind мог добавлять <alpha-value>.
+   По умолчанию — mono-dark: чёрно-белая, с серым акцентом.
+
+   Inter здесь не подгружается из сети: у окна строгая CSP, а внешний шрифт —
+   это ещё и запрос наружу при каждом старте. Если шрифт установлен в системе,
+   он подхватится; иначе работает системная гарнитура.
+   ===================================================================== */
+
+:root,
+:root[data-theme='mono-dark'] {
+  --c-bg: 10 10 12;
+  --c-surface: 20 20 24;
+  --c-surface-2: 28 28 34;
+  --c-surface-3: 38 38 46;
+  --c-border: 42 42 52;
+  --c-border-strong: 64 64 78;
+  --c-text: 240 240 244;
+  --c-text-muted: 160 160 172;
+  --c-text-dim: 110 110 122;
+  --c-accent: 240 240 244;
+  --c-accent-hover: 255 255 255;
+  --c-accent-fg: 10 10 12;
+  --c-danger: 240 92 92;
+  --c-danger-hover: 255 120 120;
+  --c-success: 74 200 124;
+  --c-warning: 234 168 72;
+  --c-scroll: 56 56 68;
+  color-scheme: dark;
+}
+
+:root[data-theme='mono-light'] {
+  --c-bg: 248 248 250;
+  --c-surface: 255 255 255;
+  --c-surface-2: 240 240 244;
+  --c-surface-3: 228 228 234;
+  --c-border: 222 222 230;
+  --c-border-strong: 200 200 210;
+  --c-text: 20 20 24;
+  --c-text-muted: 90 90 102;
+  --c-text-dim: 140 140 154;
+  --c-accent: 20 20 24;
+  --c-accent-hover: 40 40 48;
+  --c-accent-fg: 255 255 255;
+  --c-danger: 220 50 50;
+  --c-danger-hover: 180 30 30;
+  --c-success: 38 160 90;
+  --c-warning: 200 130 30;
+  --c-scroll: 200 200 210;
+  color-scheme: light;
+}
+
+:root[data-theme='indigo-dark'] {
+  --c-bg: 13 15 22;
+  --c-surface: 22 25 34;
+  --c-surface-2: 30 34 46;
+  --c-surface-3: 40 46 62;
+  --c-border: 42 48 64;
+  --c-border-strong: 64 72 94;
+  --c-text: 232 235 245;
+  --c-text-muted: 150 158 180;
+  --c-text-dim: 108 116 140;
+  --c-accent: 129 140 248;
+  --c-accent-hover: 165 175 255;
+  --c-accent-fg: 10 10 18;
+  --c-danger: 239 92 92;
+  --c-danger-hover: 255 120 120;
+  --c-success: 74 200 124;
+  --c-warning: 234 168 72;
+  --c-scroll: 60 66 86;
+  color-scheme: dark;
+}
+
+:root[data-theme='indigo-light'] {
+  --c-bg: 245 246 252;
+  --c-surface: 255 255 255;
+  --c-surface-2: 240 242 250;
+  --c-surface-3: 226 230 244;
+  --c-border: 222 226 240;
+  --c-border-strong: 200 206 228;
+  --c-text: 24 26 36;
+  --c-text-muted: 96 102 124;
+  --c-text-dim: 144 150 170;
+  --c-accent: 79 92 220;
+  --c-accent-hover: 60 72 200;
+  --c-accent-fg: 255 255 255;
+  --c-danger: 220 50 50;
+  --c-danger-hover: 180 30 30;
+  --c-success: 38 160 90;
+  --c-warning: 200 130 30;
+  --c-scroll: 200 206 220;
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: 'Inter', 'SF Pro Display', system-ui, -apple-system, sans-serif;
+  background: rgb(var(--c-bg));
+  color: rgb(var(--c-text));
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Скроллбар */
+.scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--c-scroll)) transparent;
+}
+.scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar::-webkit-scrollbar-thumb {
+  background: rgb(var(--c-scroll));
+  border-radius: 4px;
+}
+.scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--c-border-strong));
+}
+
+/* Bootstrap Icons: единый размер/выравнивание по умолчанию */
+.bi {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+/* Анимированные три точки «думает…» */
+.typing-dots {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+}
+.typing-dots > span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgb(var(--c-text-muted));
+  animation: typingDot 1.4s infinite;
+}
+.typing-dots > span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.typing-dots > span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+@keyframes typingDot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Тело сообщения: базовый сброс для кода внутри ответа */
+.msg-body pre {
+  background: rgb(var(--c-bg));
+  border: 1px solid rgb(var(--c-border));
+  border-radius: 10px;
+  padding: 12px;
+  margin: 8px 0;
+  overflow-x: auto;
+}
+.msg-body code {
+  background: rgb(var(--c-surface-3));
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-family: 'JetBrains Mono', 'Cascadia Mono', 'Courier New', monospace;
+  font-size: 0.92em;
+}
+.msg-body pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.btn-send {
+  background: rgb(var(--c-accent));
+  color: rgb(var(--c-accent-fg));
+}
+.btn-send:hover:not(:disabled) {
+  background: rgb(var(--c-accent-hover));
+}
+.btn-send:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Карточка */
+.card {
+  background: rgb(var(--c-surface));
+  border: 1px solid rgb(var(--c-border));
+  border-radius: 14px;
+}
+
+/* Сегментный переключатель */
+.seg {
+  display: inline-flex;
+  padding: 3px;
+  background: rgb(var(--c-surface-2));
+  border: 1px solid rgb(var(--c-border));
+  border-radius: 10px;
+  gap: 2px;
+}
+.seg > button {
+  padding: 6px 12px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgb(var(--c-text-muted));
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.seg > button:hover {
+  color: rgb(var(--c-text));
+}
+.seg > button[aria-pressed='true'] {
+  background: rgb(var(--c-surface));
+  color: rgb(var(--c-text));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+/* Модалка */
+.modal-backdrop {
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+}
+
+/* Перетаскивание окна за собственную полосу заголовка */
+.drag-region {
+  -webkit-app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* ───── Визард первоначальной настройки ─────
+   Шаги приезжают с той стороны, куда идёт движение: вперёд — справа, назад —
+   слева. Направление подсказывает, что произошло, лучше любой подписи. */
+@keyframes step-in-forward {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes step-in-back {
+  from {
+    opacity: 0;
+    transform: translateX(-28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.step-forward {
+  animation: step-in-forward 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.step-back {
+  animation: step-in-back 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Появление элементов по очереди: список читается сверху вниз, а не
+   вспыхивает целиком. Задержка задаётся переменной --i на элементе. */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.rise {
+  animation: rise-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--i, 0) * 70ms);
+}
+
+/* Расходящееся кольцо вокруг ядра на заставке. */
+@keyframes ring-out {
+  0% {
+    transform: scale(0.75);
+    opacity: 0.55;
+  }
+  70% {
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+.ring {
+  animation: ring-out 2.8s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  animation-delay: calc(var(--i, 0) * 900ms);
+}
+
+/* Линии связи прочерчиваются, а не возникают. */
+@keyframes draw {
+  from {
+    stroke-dashoffset: var(--len, 120);
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.draw {
+  stroke-dasharray: var(--len, 120);
+  animation: draw 900ms ease-out both;
+  animation-delay: calc(var(--i, 0) * 160ms + 260ms);
+}
+
+/* Галочка в конце: рисуется тем же приёмом. */
+@keyframes check {
+  from {
+    stroke-dashoffset: 48;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.check-draw {
+  stroke-dasharray: 48;
+  animation: check 520ms cubic-bezier(0.65, 0, 0.35, 1) 220ms both;
+}
+
+/* Полоса прогресса шагов. */
+.step-dot {
+  transition:
+    width 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 320ms ease;
+}
+
+/* Поле ввода в настройках */
+/*
+   Поле ввода объявлено внутри слоя компонентов, а не обычным правилом.
+
+   Разница не стилистическая: обычное правило, написанное после @tailwind
+   utilities, перебивает утилиты по порядку каскада. Из-за этого `pl-8` на
+   поле с иконкой поиска не работал вовсе, и лупа налезала на текст в каждом
+   таком поле приложения.
+*/
+@layer components {
+  .input {
+    width: 100%;
+    background: rgb(var(--c-bg));
+    border: 1px solid rgb(var(--c-border));
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 13px;
+    color: rgb(var(--c-text));
+    outline: none;
+    transition: border-color 0.15s;
+  }
+}
+.input:focus {
+  border-color: rgb(var(--c-accent));
+}
+.input::placeholder {
+  color: rgb(var(--c-text-dim));
+}
+
+/* ─── Выключенное движение ────────────────────────────────────────────────
+   Один атрибут гасит всё. `!important` здесь уместен: это не оформление, а
+   решение пользователя, и перебивать его частным правилом нельзя.
+*/
+[data-motion='off'] *,
+[data-motion='off'] *::before,
+[data-motion='off'] *::after {
+  animation-duration: 0.001ms !important;
+  animation-delay: 0ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  transition-delay: 0ms !important;
+  scroll-behavior: auto !important;
+}

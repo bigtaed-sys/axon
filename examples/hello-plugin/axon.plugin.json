@@ -1,0 +1,28 @@
+{
+  "id": "hello",
+  "name": "Пример плагина",
+  "description": "Показывает все точки расширения Axon на минимальном коде",
+  "version": "1.0.0",
+  "author": "Axon",
+  "api": 1,
+  "main": "./index.js",
+  "permissions": ["net"],
+  "settings": [
+    {
+      "key": "city",
+      "label": "Город",
+      "description": "Подставляется в контекст и в ответ инструмента",
+      "type": "text",
+      "default": "Варшава",
+      "placeholder": "Варшава"
+    },
+    {
+      "key": "verbose",
+      "label": "Подробные логи",
+      "type": "boolean",
+      "default": false
+    }
+  ],
+  "skills": "./skills",
+  "jobs": [{ "name": "пульс", "everySeconds": 3600, "immediate": false }]
+}

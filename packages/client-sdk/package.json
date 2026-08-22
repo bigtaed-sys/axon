@@ -1,0 +1,28 @@
+{
+  "name": "@axon/client-sdk",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Клиент Axon: подключение, догон журнала, стрим, вызов команд",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc --build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@axon/protocol": "*"
+  },
+  "devDependencies": {
+    "@axon/core": "*",
+    "@axon-assistant/core": "*",
+    "ws": "^8.18.0"
+  }
+}

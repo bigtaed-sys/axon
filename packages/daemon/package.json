@@ -1,0 +1,46 @@
+{
+  "name": "@axon-assistant/core",
+  "version": "0.1.0",
+  "description": "Ядро Axon: персональный AI-агент, который живёт на вашей машине",
+  "keywords": ["ai", "agent", "assistant", "self-hosted", "llm"],
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "axon": "./dist/cli.js"
+  },
+  "files": ["dist", "README.md"],
+  "engines": {
+    "node": ">=22.5"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc --build && node scripts/bundle.mjs",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/cli.js",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.116.0",
+    "iconv-lite": "^0.6.3",
+    "pino": "^9.5.0",
+    "ws": "^8.18.0",
+    "zod": "^3.24.1",
+    "zod-to-json-schema": "^3.24.1"
+  },
+  "devDependencies": {
+    "@axon/core": "*",
+    "@axon/protocol": "*",
+    "@types/ws": "^8.5.13",
+    "esbuild": "^0.24.2"
+  }
+}

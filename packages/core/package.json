@@ -1,0 +1,32 @@
+{
+  "name": "@axon/core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Headless-рантайм Axon: хранилище, журнал, провайдеры, инструменты, оркестратор",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc --build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.116.0",
+    "@axon-assistant/plugin-sdk": "*",
+    "@axon/protocol": "*",
+    "iconv-lite": "^0.6.3",
+    "pino": "^9.5.0",
+    "zod": "^3.24.1",
+    "zod-to-json-schema": "^3.24.1"
+  },
+  "engines": {
+    "node": ">=22.5"
+  }
+}
