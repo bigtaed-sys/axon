@@ -50,6 +50,54 @@ export interface Command {
   request: string;
 }
 
+/** Сообщение, на которое отвечают, вместе с автором. */
+export interface Quoted {
+  /** Как зовут написавшего. Пусто — сам человек. */
+  author: string;
+  text: string;
+}
+
+/**
+ * Задание для модели.
+ *
+ * Главное здесь — не формат, а два факта, без которых ответ выходит не тем.
+ *
+ * Первый: **написанное станет сообщением человека в этом чате**. Без этого
+ * модель отвечает так, будто разговаривает с ним, — «вот перевод:», «конечно,
+ * сейчас сделаю», — и всё это уезжает собеседнику от его имени.
+ *
+ * Второй: **цитату написал не он**. Первая версия подставляла текст без автора,
+ * и модель считала, что это реплика самого человека, — то есть отвечала ему на
+ * то, что сказал его друг.
+ */
+export function buildPrompt(request: string, quoted: Quoted | null): string {
+  const lines = [
+    'Ты пишешь от имени человека в его переписке в телеграме. Всё, что ты ' +
+      'ответишь, отправится в чат как его собственное сообщение.',
+    '',
+  ];
+
+  if (quoted) {
+    lines.push(
+      quoted.author
+        ? `Собеседник (${quoted.author}) написал:`
+        : 'Человек, от чьего имени ты пишешь, написал ранее:',
+      `«${quoted.text}»`,
+      '',
+    );
+  }
+
+  lines.push(
+    `Что он просит сделать: ${request}`,
+    '',
+    'Ответь текстом, который уйдёт в чат как есть. Не обращайся к человеку, ' +
+      'который тебя позвал, — он твой ответ не читает, читает собеседник. Без ' +
+      'вступлений вроде «вот перевод» и без пояснений о том, что ты сделал.',
+  );
+
+  return lines.join('\n');
+}
+
 /**
  * Выделить команду из текста сообщения.
  *
@@ -151,27 +199,20 @@ export class Userbot {
      * конкретному сообщению, а не к разговору вообще, и брать двадцать строк
      * чужой переписки ради одной — значит отправлять модели чужое без нужды.
      */
-    const replied = await message.getReplyMessage().catch(() => null);
-    const quoted = replied?.text?.trim();
-
-    await this.answer(message, command.request, quoted ?? '');
+    await this.answer(message, command.request, await quotedOf(message));
   }
 
   private async answer(
     message: Api.Message,
     request: string,
-    quoted: string,
+    quoted: Quoted | null,
   ): Promise<void> {
     const client = this.client;
     if (!client) return;
 
-    const prompt = quoted
-      ? `${request}\n\nСообщение, к которому это относится:\n«${quoted}»`
-      : request;
-
     const { runId } = this.deps.runtime.orchestrator.startRun({
       conversationId: this.conversation(),
-      parts: [{ type: 'text', text: prompt }],
+      parts: [{ type: 'text', text: buildPrompt(request, quoted) }],
       /**
        * Только безопасные инструменты.
        *
@@ -278,4 +319,33 @@ export class Userbot {
 
     return existing ? existing.id : this.deps.runtime.store.createConversation(CONVERSATION_TITLE).id;
   }
+}
+
+/**
+ * Сообщение, на которое отвечают, вместе с именем автора.
+ *
+ * Имя обязательно: без него модель принимает цитату за реплику самого
+ * человека и отвечает ему на то, что написал его собеседник.
+ */
+async function quotedOf(message: Api.Message): Promise<Quoted | null> {
+  const replied = await message.getReplyMessage().catch(() => null);
+  const text = replied?.text?.trim();
+  if (!replied || !text) return null;
+
+  // Ответ на собственное сообщение — законный случай: «переведи то, что я
+  // написал». Тогда автор не называется, иначе модель решит, что это третий.
+  if (replied.out) return { author: '', text };
+
+  const sender = await replied.getSender().catch(() => null);
+  return { author: nameOf(sender), text };
+}
+
+/** Как зовут отправителя. Человек, канал или неизвестно — три разных случая. */
+function nameOf(sender: unknown): string {
+  if (!sender || typeof sender !== 'object') return 'собеседник';
+
+  const it = sender as { firstName?: string; lastName?: string; username?: string; title?: string };
+  const person = [it.firstName, it.lastName].filter(Boolean).join(' ');
+
+  return person || it.title || it.username || 'собеседник';
 }

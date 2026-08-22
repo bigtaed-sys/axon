@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseCommand } from '../src/Userbot.js';
+import { buildPrompt, parseCommand } from '../src/Userbot.js';
 
 describe('разбор команды', () => {
   it('срабатывает на префикс с запросом', () => {
@@ -37,5 +37,40 @@ describe('разбор команды', () => {
   it('свой префикс работает так же', () => {
     expect(parseCommand('!аи посчитай', '!аи')).toEqual({ request: 'посчитай' });
     expect(parseCommand('.axon посчитай', '!аи')).toBeNull();
+  });
+});
+
+describe('задание для модели', () => {
+  it('говорит, что ответ станет сообщением человека', () => {
+    // Без этого модель отвечает так, будто разговаривает с тем, кто её позвал:
+    // «вот перевод», «конечно, сейчас» — и всё это уезжает собеседнику.
+    const prompt = buildPrompt('переведи', null);
+
+    expect(prompt).toContain('от имени человека');
+    expect(prompt).toContain('как его собственное сообщение');
+    expect(prompt).toContain('он твой ответ не читает');
+  });
+
+  it('называет автора цитаты', () => {
+    // Первая версия подставляла текст без автора, и модель принимала реплику
+    // друга за слова самого человека — то есть отвечала не тому.
+    const prompt = buildPrompt('ответь ему', { author: 'Миша', text: 'ты придёшь?' });
+
+    expect(prompt).toContain('Собеседник (Миша) написал');
+    expect(prompt).toContain('ты придёшь?');
+  });
+
+  it('ответ на собственное сообщение автора не выдумывает', () => {
+    const prompt = buildPrompt('переведи', { author: '', text: 'буду в десять' });
+
+    expect(prompt).toContain('написал ранее');
+    expect(prompt).not.toContain('Собеседник');
+  });
+
+  it('без цитаты — только просьба', () => {
+    const prompt = buildPrompt('посчитай 2+2', null);
+
+    expect(prompt).toContain('посчитай 2+2');
+    expect(prompt).not.toContain('написал');
   });
 });
