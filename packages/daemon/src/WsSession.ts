@@ -10,7 +10,7 @@ import {
 } from '@axon/protocol';
 import { logger, type Runtime } from '@axon/core';
 import type { PairingService } from './auth.js';
-import { CommandError, dispatch } from './commands.js';
+import { CommandError, dispatch, type TelegramControl } from './commands.js';
 import type { PermissionHub } from './PermissionHub.js';
 
 /**
@@ -27,6 +27,7 @@ export interface SessionDeps {
   runtime: Runtime;
   pairing: PairingService;
   permissions: PermissionHub;
+  telegram: TelegramControl;
   version: string;
   mode: 'embedded' | 'standalone';
 }
@@ -139,6 +140,7 @@ export class WsSession {
         runtime: this.deps.runtime,
         device: this.device,
         pairing: this.deps.pairing,
+        telegram: this.deps.telegram,
         permissions: this.deps.permissions,
       });
       this.send({ t: 'res', id, payload: result });

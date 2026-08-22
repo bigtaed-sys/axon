@@ -10,11 +10,29 @@ import { buildContextReport, DISABLED_TOOLS_SETTING, type Runtime } from '@axon/
 import type { PairingService } from './auth.js';
 import type { PermissionHub } from './PermissionHub.js';
 
+/**
+ * Что умеет демон и чего нет в ядре.
+ *
+ * Узкий интерфейс, а не ссылка на сам демон: команды не должны знать про
+ * сокеты, порты и упаковку — только про те три действия, которые им нужны.
+ * Заодно это разрывает круг в импортах, который иначе завязался бы между
+ * демоном и его же обработчиками.
+ */
+export interface TelegramControl {
+  telegramLogin(
+    step: 'phone' | 'code' | 'password' | 'cancel',
+    value: string,
+  ): Promise<{ state: 'code_sent' | 'password_needed' | 'done' | 'cancelled'; hint?: string; name?: string }>;
+  telegramLogout(): Promise<void>;
+  telegramStatus(): { bot: boolean; user: boolean };
+}
+
 export interface CommandContext {
   runtime: Runtime;
   device: Device;
   pairing: PairingService;
   permissions: PermissionHub;
+  telegram: TelegramControl;
 }
 
 export class CommandError extends Error {
@@ -364,6 +382,16 @@ const handlers: Handlers = {
   },
 
   // ─── Расход ──
+  // ─── Телеграм ──
+  'telegram.login': (req, { telegram }) => telegram.telegramLogin(req.step, req.value),
+
+  'telegram.logout': async (_req, { telegram }) => {
+    await telegram.telegramLogout();
+    return ok;
+  },
+
+  'telegram.status': (_req, { telegram }) => telegram.telegramStatus(),
+
   'usage.summary': (req, { runtime }) => {
     const since = req.since ?? startOfToday();
     const totals = runtime.store.usage.totals(since);

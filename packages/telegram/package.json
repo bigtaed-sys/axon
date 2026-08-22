@@ -12,5 +12,8 @@
   "devDependencies": {
     "@axon/core": "*",
     "@axon/protocol": "*"
+  },
+  "dependencies": {
+    "telegram": "^2.26.22"
   }
 }

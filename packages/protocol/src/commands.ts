@@ -220,6 +220,36 @@ export const zFactForgetReq = z.object({ id: zId });
  */
 export const zObservationForgetReq = z.object({ id: zId });
 
+/**
+ * Вход в телеграм под своим аккаунтом — тремя шагами.
+ *
+ * Одной командой не выйдет: между шагами телеграм присылает код, а человек его
+ * набирает. Держать соединение открытым и ждать ввода посреди ядра значит
+ * повесить команду до таймаута.
+ *
+ * Значения шагов наружу не возвращаются никогда: ни код, ни пароль, ни готовая
+ * сессия. Сессия — полный доступ к аккаунту, она уходит прямо в секреты.
+ */
+export const zTelegramLoginReq = z.object({
+  step: z.enum(['phone', 'code', 'password', 'cancel']),
+  value: z.string().max(200).default(''),
+});
+export const zTelegramLoginRes = z.object({
+  state: z.enum(['code_sent', 'password_needed', 'done', 'cancelled']),
+  /** Куда пришёл код — в телеграм или сообщением. Только для подсказки. */
+  hint: z.string().optional(),
+  /** Как зовут вошедший аккаунт. Появляется на последнем шаге. */
+  name: z.string().optional(),
+});
+
+export const zTelegramStatusRes = z.object({
+  /** Поднят ли бот: у него есть токен и он на связи. */
+  bot: z.boolean(),
+  /** Работает ли юзербот и под каким именем. */
+  user: z.boolean(),
+  userName: z.string().optional(),
+});
+
 export const zUsageSummaryReq = z.object({
   /** Начало окна, ISO-8601. Пусто — с начала суток по времени ядра. */
   since: z.string().datetime().optional(),
@@ -303,6 +333,10 @@ export const commands = {
   'fact.forget': { req: zFactForgetReq, res: zOkRes },
   'observation.forget': { req: zObservationForgetReq, res: zOkRes },
 
+  'telegram.login': { req: zTelegramLoginReq, res: zTelegramLoginRes },
+  'telegram.logout': { req: z.object({}), res: zOkRes },
+  'telegram.status': { req: z.object({}), res: zTelegramStatusRes },
+
   'usage.summary': { req: zUsageSummaryReq, res: zUsageSummaryRes },
 } as const satisfies Record<string, { req: z.ZodTypeAny; res: z.ZodTypeAny }>;
 
@@ -372,5 +406,9 @@ export const commandScopes: Record<CommandName, ReadonlyArray<z.infer<typeof zSc
   'fact.upsert': ['chat.write'],
   'fact.forget': ['chat.write'],
   'observation.forget': ['chat.write'],
+  'telegram.login': ['settings.write'],
+  'telegram.logout': ['settings.write'],
+  'telegram.status': ['settings.write'],
+
   'usage.summary': ['chat.read'],
 };

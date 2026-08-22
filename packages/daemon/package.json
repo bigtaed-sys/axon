@@ -42,6 +42,7 @@
     "@anthropic-ai/sdk": "^0.116.0",
     "iconv-lite": "^0.6.3",
     "pino": "^9.5.0",
+    "telegram": "^2.26.22",
     "ws": "^8.18.0",
     "zod": "^3.24.1",
     "zod-to-json-schema": "^3.24.1"

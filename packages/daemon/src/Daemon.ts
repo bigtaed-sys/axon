@@ -7,7 +7,15 @@ import { createRuntime, logger } from '@axon/core';
 import { authenticate, PairingService } from './auth.js';
 import { PermissionHub } from './PermissionHub.js';
 import type { Signal } from '@axon/protocol';
-import { BOT_TOKEN_SECRET, TelegramAdapter } from '@axon/telegram';
+import {
+  API_HASH_SECRET,
+  API_ID_SETTING,
+  BOT_TOKEN_SECRET,
+  SESSION_SECRET,
+  TelegramAdapter,
+  Userbot,
+  UserbotAuth,
+} from '@axon/telegram';
 import { WsSession } from './WsSession.js';
 
 /** Подставляется при сборке пакета; в разработке остаётся пометка. */
@@ -51,6 +59,10 @@ export class Daemon {
   private readonly wss: WebSocketServer;
   private address: DaemonAddress | null = null;
   private telegram: TelegramAdapter | null = null;
+  /** Агент под аккаунтом владельца. Поднимается, когда в секретах есть сессия. */
+  readonly userbot: Userbot;
+  /** Незавершённый вход: живёт между шагами «телефон → код → пароль». */
+  private auth: UserbotAuth | null = null;
   /**
    * Кто ещё слушает эфемерику, кроме сокетов.
    *
@@ -80,6 +92,14 @@ export class Daemon {
       // снапшота, а досылать пропущенные статусы бессмысленно.
       onPluginStatus: (plugin) => {
         for (const session of this.sessions) session.emitSignal({ type: 'plugin.status', plugin });
+      },
+    });
+
+    this.userbot = new Userbot({
+      runtime: this.runtime,
+      onSignal: (listener) => {
+        this.signalListeners.add(listener);
+        return () => this.signalListeners.delete(listener);
       },
     });
 
@@ -128,6 +148,7 @@ export class Daemon {
     });
 
     void this.syncTelegram();
+    void this.syncUserbot();
 
     /**
      * Токен бота вписывают в настройках уже работающего ядра — значит,
@@ -138,8 +159,8 @@ export class Daemon {
     this.runtime.store.journal.subscribe((entry) => {
       const event = entry.event;
       if (event.type !== 'settings.changed') return;
-      if (!event.keys.includes(BOT_TOKEN_SECRET)) return;
-      void this.syncTelegram();
+      if (event.keys.includes(BOT_TOKEN_SECRET)) void this.syncTelegram();
+      if (event.keys.includes(SESSION_SECRET)) void this.syncUserbot();
     });
 
     return { address: this.address, bootstrapCode };
@@ -189,6 +210,84 @@ export class Daemon {
   }
 
   /**
+   * Поднять или погасить юзербота по наличию сессии.
+   *
+   * Отдельно от бота: это разные вещи, и одна работает без другой. Бот —
+   * канал к агенту, юзербот — команда `.axon` в чужих чатах от твоего имени.
+   */
+  private async syncUserbot(): Promise<void> {
+    const session = this.runtime.store.secrets.reveal(SESSION_SECRET);
+    const apiHash = this.runtime.store.secrets.reveal(API_HASH_SECRET);
+    const apiId = Number(this.runtime.store.settings.get<string | number>(API_ID_SETTING) ?? 0);
+
+    if (this.userbot.running) await this.userbot.stop();
+    if (!session || !apiHash || !apiId) return;
+
+    try {
+      const { name } = await this.userbot.start(session, apiId, apiHash);
+      logger.info({ name }, 'юзербот на связи');
+    } catch (error) {
+      // Сессия могла протухнуть: человек вышел из аккаунта в другом клиенте.
+      logger.warn({ err: (error as Error).message }, 'юзербот не поднялся');
+      await this.userbot.stop().catch(() => undefined);
+    }
+  }
+
+  /**
+   * Шаг входа в аккаунт.
+   *
+   * Состояние живёт между вызовами в `this.auth`: телеграм присылает код между
+   * первым шагом и вторым, и всё это время соединение должно оставаться тем же.
+   */
+  async telegramLogin(step: 'phone' | 'code' | 'password' | 'cancel', value: string) {
+    if (step === 'cancel') {
+      await this.auth?.cancel();
+      this.auth = null;
+      return { state: 'cancelled' as const };
+    }
+
+    if (step === 'phone') {
+      const apiId = Number(this.runtime.store.settings.get<string | number>(API_ID_SETTING) ?? 0);
+      const apiHash = this.runtime.store.secrets.reveal(API_HASH_SECRET);
+      if (!apiId || !apiHash) {
+        throw new Error('Сначала укажите api_id и api_hash с my.telegram.org');
+      }
+      this.auth = new UserbotAuth(apiId, apiHash);
+    }
+
+    if (!this.auth) throw new Error('Вход не начат');
+
+    const result =
+      step === 'phone'
+        ? await this.auth.sendCode(value)
+        : step === 'code'
+          ? await this.auth.signIn(value)
+          : await this.auth.checkPassword(value);
+
+    if (result.kind === 'code_sent') return { state: 'code_sent' as const, hint: result.hint };
+    if (result.kind === 'password_needed') return { state: 'password_needed' as const };
+
+    // Сессия уходит прямо в секреты и наружу не возвращается никогда.
+    this.runtime.store.updateSettings({ secrets: { [SESSION_SECRET]: result.session } });
+    this.auth = null;
+    await this.syncUserbot();
+
+    return { state: 'done' as const, name: result.name };
+  }
+
+  async telegramLogout(): Promise<void> {
+    await this.userbot.stop();
+    this.runtime.store.updateSettings({ secrets: { [SESSION_SECRET]: null } });
+  }
+
+  telegramStatus() {
+    return {
+      bot: this.telegram !== null,
+      user: this.userbot.running,
+    };
+  }
+
+  /**
    * Заявка о себе рядом с данными.
    *
    * Ядро — самостоятельная программа, и запустить его может кто угодно:
@@ -223,6 +322,7 @@ export class Daemon {
     // прогон, дошедший до записи в журнал после close(), роняет процесс.
     this.runtime.orchestrator.cancelAll();
     await this.telegram?.stop();
+    await this.userbot.stop();
     this.permissions.shutdown();
     for (const session of this.sessions) session.close();
     this.sessions.clear();
@@ -348,6 +448,7 @@ export class Daemon {
         runtime: this.runtime,
         pairing: this.pairing,
         permissions: this.permissions,
+        telegram: this,
         version: DAEMON_VERSION,
         mode: this.options.mode ?? 'standalone',
       });

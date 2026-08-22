@@ -192,7 +192,7 @@ export function SettingsPanel({
           {page === 'vision' && <VisionPage {...shared} />}
           {page === 'persona' && <PersonaPage {...shared} />}
           {page === 'impulse' && <ImpulsePage {...shared} />}
-          {page === 'telegram' && <TelegramPage {...shared} />}
+          {page === 'telegram' && <TelegramPage {...shared} client={client} />}
           {page === 'budget' && <BudgetPage {...shared} />}
           {page === 'core' && (
             <CorePage
@@ -807,7 +807,7 @@ interface TelegramChat {
   name: string;
 }
 
-function TelegramPage({ values, secrets, save, saveSecret }: PageProps) {
+function TelegramPage({ values, secrets, save, saveSecret, client }: PageProps & { client: AxonClient }) {
   const [draft, setDraft] = useState('');
   const secret = secrets.find((item) => item.key === 'telegram.botToken');
   const chats = (values['telegram.chats'] ?? {}) as Record<string, TelegramChat>;
@@ -905,7 +905,16 @@ function TelegramPage({ values, secrets, save, saveSecret }: PageProps) {
         )}
       </Section>
 
-      <Section title="Что умеет" icon="bi-list-check">
+      <UserbotSection
+        values={values}
+        secrets={secrets}
+        providers={[]}
+        save={save}
+        saveSecret={saveSecret}
+        client={client}
+      />
+
+      <Section title="Что умеет бот" icon="bi-list-check">
         <ul className="text-[12px] text-text-muted leading-relaxed space-y-1.5">
           <li>
             · Отвечает в том же разговоре, что и десктоп — контекст один на все окна.
@@ -925,6 +934,225 @@ function TelegramPage({ values, secrets, save, saveSecret }: PageProps) {
             · Присылает то, что агент написал сам по своему почину, — если инициатива включена.
             Ради этого она и делалась: до человека за компьютером достучаться можно и так.
           </li>
+        </ul>
+      </Section>
+    </>
+  );
+}
+
+/** Шаг входа в аккаунт. Состояние живёт в окне, а не в ядре. */
+type LoginStage = 'idle' | 'phone' | 'code' | 'password';
+
+/**
+ * Юзербот — агент под вашим аккаунтом, по явной команде.
+ *
+ * Отдельно от бота намеренно: это не второй канал, а другая возможность.
+ * Бот — окно к агенту, юзербот — команда в чужом чате от вашего имени. У них
+ * разные риски, и складывать их в один раздел значило бы делать вид, что риск
+ * одинаковый.
+ */
+function UserbotSection({ values, secrets, save, saveSecret, client }: PageProps & { client: AxonClient }) {
+  const [stage, setStage] = useState<LoginStage>('idle');
+  const [draft, setDraft] = useState('');
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [connected, setConnected] = useState<boolean | null>(null);
+
+  const apiHash = secrets.find((item) => item.key === 'telegram.apiHash');
+  const session = secrets.find((item) => item.key === 'telegram.userSession');
+  const apiId = String(values['telegram.apiId'] ?? '');
+  const ready = Boolean(apiId && apiHash?.set);
+
+  useEffect(() => {
+    void client
+      .call('telegram.status', {})
+      .then((res) => setConnected(res.user))
+      .catch(() => setConnected(null));
+  }, [session?.set]);
+
+  const step = async (
+    kind: 'phone' | 'code' | 'password' | 'cancel',
+    value: string,
+  ): Promise<void> => {
+    setBusy(true);
+    setNote(null);
+    try {
+      const res = await client.call('telegram.login', { step: kind, value });
+      setDraft('');
+
+      if (res.state === 'code_sent') {
+        setStage('code');
+        setNote(`Код отправлен ${res.hint ?? ''}`.trim());
+      } else if (res.state === 'password_needed') {
+        setStage('password');
+        setNote('Включена двухфакторка — нужен пароль.');
+      } else if (res.state === 'done') {
+        setStage('idle');
+        setConnected(true);
+        setNote(`Вошли как ${res.name ?? 'аккаунт'}.`);
+      } else {
+        setStage('idle');
+      }
+    } catch (error) {
+      setNote((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <Section
+        title="Команда в любом чате"
+        icon="bi-person-badge"
+        hint="Пишете «.axon переведи это» в любом чате — и ваше же сообщение заменяется ответом. Агент срабатывает только на этот префикс и только на ваши сообщения; всё остальное время он ничего не читает и ничего не делает."
+      >
+        {connected ? (
+          <>
+            <p className="text-[12px] text-success flex items-center gap-1.5">
+              <i className="bi bi-check-circle-fill" />
+              аккаунт подключён
+            </p>
+            <Field
+              label="Префикс команды"
+              hint="Регистр не важен. Проверяется только в начале сообщения, и после него должен идти пробел — иначе «.axonometry» стало бы командой."
+            >
+              <input
+                className="input"
+                defaultValue={String(values['telegram.trigger'] ?? '.axon')}
+                onBlur={(e) => void save({ 'telegram.trigger': e.target.value.trim() || '.axon' })}
+              />
+            </Field>
+            <button
+              type="button"
+              onClick={async () => {
+                await client.call('telegram.logout', {});
+                setConnected(false);
+              }}
+              className="h-9 px-4 rounded-lg border border-border text-[12px] text-text-muted hover:border-danger hover:text-danger transition-colors"
+            >
+              Отключить аккаунт
+            </button>
+          </>
+        ) : (
+          <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-warning/10 border border-warning/30">
+            <i className="bi bi-exclamation-triangle text-warning text-[12px] mt-0.5" />
+            <p className="text-[11px] text-text-muted leading-relaxed">
+              Вход даёт ядру <b>полный доступ к вашему аккаунту</b> — это не токен бота, а
+              ключ от переписки целиком. Он ляжет в секреты рядом с ключами от моделей. И
+              учтите: телеграм не любит автоматику с пользовательских аккаунтов, риск блокировки
+              есть, хоть при вызовах по команде он и невелик.
+            </p>
+          </div>
+        )}
+      </Section>
+
+      {!connected && (
+        <Section
+          title="Вход"
+          icon="bi-box-arrow-in-right"
+          hint="Нужно приложение на my.telegram.org — там выдают api_id и api_hash. Это разовое действие."
+        >
+          <Field label="api_id">
+            <input
+              className="input"
+              defaultValue={apiId}
+              placeholder="1234567"
+              onBlur={(e) => void save({ 'telegram.apiId': e.target.value.trim() })}
+            />
+          </Field>
+
+          <Field label="api_hash">
+            <div className="flex gap-2">
+              <input
+                type="password"
+                className="input flex-1"
+                placeholder={apiHash?.set ? `задан, оканчивается на ${apiHash.hint}` : 'не задан'}
+                onBlur={(e) => {
+                  const value = e.target.value.trim();
+                  if (value) void saveSecret('telegram.apiHash', value);
+                }}
+              />
+            </div>
+          </Field>
+
+          {ready && (
+            <>
+              {stage === 'idle' && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setStage('phone')}
+                  className="h-9 px-4 rounded-lg bg-accent text-accent-fg text-[12px] font-medium disabled:opacity-40 hover:opacity-90 transition-opacity"
+                >
+                  Войти в аккаунт
+                </button>
+              )}
+
+              {stage !== 'idle' && (
+                <Field
+                  label={
+                    stage === 'phone'
+                      ? 'Номер телефона'
+                      : stage === 'code'
+                        ? 'Код из телеграма'
+                        : 'Пароль двухфакторки'
+                  }
+                >
+                  <div className="flex gap-2">
+                    <input
+                      className="input flex-1"
+                      type={stage === 'password' ? 'password' : 'text'}
+                      value={draft}
+                      autoFocus
+                      placeholder={stage === 'phone' ? '+7…' : ''}
+                      onChange={(e) => setDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && draft.trim()) void step(stage, draft.trim());
+                      }}
+                    />
+                    <button
+                      type="button"
+                      disabled={busy || !draft.trim()}
+                      onClick={() => void step(stage, draft.trim())}
+                      className="h-9 px-4 rounded-lg bg-accent text-accent-fg text-[12px] font-medium disabled:opacity-40 hover:opacity-90 transition-opacity"
+                    >
+                      {busy ? '…' : 'Дальше'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStage('idle');
+                        setDraft('');
+                        void step('cancel', '');
+                      }}
+                      className="h-9 px-3 rounded-lg border border-border text-[12px] text-text-muted hover:text-text transition-colors"
+                    >
+                      Отмена
+                    </button>
+                  </div>
+                </Field>
+              )}
+            </>
+          )}
+
+          {note && <p className="text-[11px] text-text-muted leading-relaxed">{note}</p>}
+        </Section>
+      )}
+
+      <Section title="Что он может и чего не может" icon="bi-shield-check">
+        <ul className="text-[12px] text-text-muted leading-relaxed space-y-1.5">
+          <li>· Срабатывает только на префикс и только на ваши сообщения.</li>
+          <li>
+            · Из чата видит <b>только то сообщение, на которое вы отвечаете</b>. Переписку не
+            читает: подписки на входящие сообщения у него нет вовсе.
+          </li>
+          <li>· Только безопасные инструменты: подтверждать опасное посреди чужого чата некому.</li>
+          <li>
+            · Пишет в отдельный разговор «Команды из телеграма» — то, что сказано от вашего имени,
+            собрано в одном месте.
+          </li>
+          <li>· В память ничего не пишет: чужая переписка — не наблюдение о вас.</li>
         </ul>
       </Section>
     </>
