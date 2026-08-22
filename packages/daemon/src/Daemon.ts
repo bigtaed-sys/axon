@@ -95,13 +95,7 @@ export class Daemon {
       },
     });
 
-    this.userbot = new Userbot({
-      runtime: this.runtime,
-      onSignal: (listener) => {
-        this.signalListeners.add(listener);
-        return () => this.signalListeners.delete(listener);
-      },
-    });
+    this.userbot = new Userbot({ runtime: this.runtime });
 
     this.pairing = new PairingService(
       this.runtime,

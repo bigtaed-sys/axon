@@ -2,8 +2,8 @@ import { Api, TelegramClient } from 'telegram';
 import { NewMessage, type NewMessageEvent } from 'telegram/events/index.js';
 import { StringSession } from 'telegram/sessions/index.js';
 import { Logger, LogLevel } from 'telegram/extensions/Logger.js';
-import type { JournalEntry, Scope, Signal } from '@axon/protocol';
-import type { Runtime } from '@axon/core';
+import type { JournalEntry, Scope } from '@axon/protocol';
+import { logger, type Runtime } from '@axon/core';
 
 /**
  * Агент под твоим аккаунтом, по явной команде.
@@ -43,7 +43,6 @@ const MAX_ANSWER = 3800;
 
 export interface UserbotDeps {
   runtime: Runtime;
-  onSignal(listener: (signal: Signal) => void): () => void;
 }
 
 /** Разобранная команда: что просят и к чему это относится. */
@@ -80,8 +79,15 @@ export class Userbot {
   private client: TelegramClient | null = null;
   private readonly unsubscribe: Array<() => void> = [];
 
-  /** Прогоны в работе: runId → куда вписать ответ. */
-  private readonly waiting = new Map<string, { peer: Api.TypePeer; messageId: number }>();
+  /**
+   * Прогоны в работе: runId → сообщение, которое надо переписать.
+   *
+   * Держим сам объект сообщения, а не пару «peer + id». Разница не
+   * косметическая: `client.editMessage` требует входной peer, а у свежей
+   * сессии кэш сущностей пуст, и сырой `PeerUser` в него не превращается —
+   * правка отказывает. У самого сообщения peer уже есть.
+   */
+  private readonly waiting = new Map<string, Api.Message>();
   /** Ответ агента по разговорам: до конца прогона он ещё дописывается. */
   private readonly said = new Map<string, string>();
 
@@ -112,7 +118,6 @@ export class Userbot {
       this.deps.runtime.store.journal.subscribe((entry) => {
         void this.onJournal(entry).catch(() => undefined);
       }),
-      this.deps.onSignal((signal) => this.onSignal(signal)),
     );
 
     this.client = client;
@@ -177,17 +182,17 @@ export class Userbot {
       platform: 'telegram',
     });
 
-    this.waiting.set(runId, { peer: message.peerId, messageId: message.id });
-    await this.show(message.peerId, message.id, '…');
-  }
+    this.waiting.set(runId, message);
 
-  private onSignal(signal: Signal): void {
-    // Черновик показываем только на первом куске: править чужой чат каждые
-    // полторы секунды — это мельтешение в переписке живого человека.
-    if (signal.type !== 'run.delta') return;
-    const target = this.waiting.get(signal.runId);
-    if (!target) return;
-    void this.show(target.peer, target.messageId, '…');
+    /**
+     * Многоточие вместо растущего черновика.
+     *
+     * В боте ответ дорисовывается по мере генерации, здесь — нет: это чужой
+     * чат, и правка каждые полторы секунды означала бы мельтешение в переписке
+     * живого человека, у которого при каждой правке всплывает «изменено».
+     * Одна правка в начале, одна в конце.
+     */
+    await this.show(message, '…');
   }
 
   private async onJournal(entry: JournalEntry): Promise<void> {
@@ -207,7 +212,10 @@ export class Userbot {
       if (!target) return;
       this.waiting.delete(event.runId);
 
-      const text = this.said.get(event.conversationId) ?? '';
+      const text =
+        event.type === 'run.failed'
+          ? `Не получилось: ${event.error}`
+          : (this.said.get(event.conversationId) ?? '');
       this.said.delete(event.conversationId);
 
       /**
@@ -216,7 +224,7 @@ export class Userbot {
        * Это чужой чат: висящее «…» собеседник прочтёт как начатую и брошенную
        * мысль, и переспросит.
        */
-      await this.show(target.peer, target.messageId, text.trim() || '—');
+      await this.show(target, text.trim() || '—');
     }
   }
 
@@ -228,13 +236,25 @@ export class Userbot {
    * помогает, а незакрытый тег заставил бы телеграм отвергнуть правку целиком,
    * и на месте команды навсегда осталось бы многоточие.
    */
-  private async show(peer: Api.TypePeer, messageId: number, text: string): Promise<void> {
-    const client = this.client;
-    if (!client) return;
+  private async show(message: Api.Message, text: string): Promise<void> {
+    try {
+      await message.edit({ text: text.slice(0, MAX_ANSWER) });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
 
-    await client
-      .editMessage(peer, { message: messageId, text: text.slice(0, MAX_ANSWER) })
-      .catch(() => undefined);
+      // Текст не изменился — телеграм считает это ошибкой, а для нас это
+      // норма: попросили вписать то, что уже вписано.
+      if (reason.includes('MESSAGE_NOT_MODIFIED')) return;
+
+      /**
+       * Молчать здесь нельзя.
+       *
+       * Именно проглоченная ошибка правки сделала первую версию юзербота
+       * необъяснимой: прогон шёл, ответ появлялся в приложении, а в чате не
+       * менялось ничего — и понять, почему, было неоткуда.
+       */
+      logger.warn({ err: reason }, 'не удалось переписать сообщение в телеграме');
+    }
   }
 
   // ─── Мелочи ───────────────────────────────────────────────────────────────
