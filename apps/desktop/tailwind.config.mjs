@@ -37,6 +37,7 @@ export default {
         },
         success: { DEFAULT: 'rgb(var(--c-success) / <alpha-value>)' },
         warning: { DEFAULT: 'rgb(var(--c-warning) / <alpha-value>)' },
+        info: { DEFAULT: 'rgb(var(--c-info) / <alpha-value>)' },
       },
       fontFamily: {
         sans: ['"Inter"', '"SF Pro Display"', 'system-ui', '-apple-system', 'sans-serif'],

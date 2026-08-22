@@ -31,6 +31,7 @@
   --c-danger-hover: 255 120 120;
   --c-success: 74 200 124;
   --c-warning: 234 168 72;
+  --c-info: 141 132 248;
   --c-scroll: 56 56 68;
   color-scheme: dark;
 }
@@ -52,6 +53,7 @@
   --c-danger-hover: 180 30 30;
   --c-success: 38 160 90;
   --c-warning: 200 130 30;
+  --c-info: 96 84 214;
   --c-scroll: 200 200 210;
   color-scheme: light;
 }
@@ -73,6 +75,7 @@
   --c-danger-hover: 255 120 120;
   --c-success: 74 200 124;
   --c-warning: 234 168 72;
+  --c-info: 129 140 248;
   --c-scroll: 60 66 86;
   color-scheme: dark;
 }
@@ -94,6 +97,7 @@
   --c-danger-hover: 180 30 30;
   --c-success: 38 160 90;
   --c-warning: 200 130 30;
+  --c-info: 88 78 208;
   --c-scroll: 200 206 220;
   color-scheme: light;
 }

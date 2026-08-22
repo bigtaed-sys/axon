@@ -359,7 +359,12 @@ function MemoryHeading({ title, note }: { title: string; note: string }) {
  *
  * Заметная, а не подпись в скобках. Разница существенная для человека: у
  * MCP-сервера чужой автор, свой процесс и свой темп обновлений, а «плагин» —
- * это код, написанный под Axon. Одинаково серым это писать нельзя.
+ * это код, написанный под Axon.
+ *
+ * Обе метки цветные, и обе — своим цветом, а не акцентным. В чёрно-белых
+ * темах акцент сам почти серый, поэтому «выделить акцентом» там ничего не
+ * выделяет; а серая метка рядом с цветной читается как второстепенная, хотя
+ * второстепенной ни одна из них не является.
  */
 export function KindBadge({ mcp }: { mcp: boolean }) {
   return (
@@ -367,8 +372,8 @@ export function KindBadge({ mcp }: { mcp: boolean }) {
       className={clsx(
         'shrink-0 text-[9px] font-bold tracking-[0.08em] px-1.5 py-0.5 rounded border leading-none',
         mcp
-          ? 'text-accent border-accent/50 bg-accent/10'
-          : 'text-text-muted border-border-strong bg-surface-3',
+          ? 'text-info border-info/45 bg-info/12'
+          : 'text-success border-success/45 bg-success/12',
       )}
     >
       {mcp ? 'MCP' : 'PLUGIN'}
