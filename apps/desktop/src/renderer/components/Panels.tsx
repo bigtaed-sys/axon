@@ -354,6 +354,28 @@ function MemoryHeading({ title, note }: { title: string; note: string }) {
   );
 }
 
+/**
+ * Метка происхождения: свой плагин или обёртка вокруг MCP-сервера.
+ *
+ * Заметная, а не подпись в скобках. Разница существенная для человека: у
+ * MCP-сервера чужой автор, свой процесс и свой темп обновлений, а «плагин» —
+ * это код, написанный под Axon. Одинаково серым это писать нельзя.
+ */
+export function KindBadge({ mcp }: { mcp: boolean }) {
+  return (
+    <span
+      className={clsx(
+        'shrink-0 text-[9px] font-bold tracking-[0.08em] px-1.5 py-0.5 rounded border leading-none',
+        mcp
+          ? 'text-accent border-accent/50 bg-accent/10'
+          : 'text-text-muted border-border-strong bg-surface-3',
+      )}
+    >
+      {mcp ? 'MCP' : 'PLUGIN'}
+    </span>
+  );
+}
+
 export const TIER: Record<RiskTier, { label: string; tone: string; icon: string }> = {
   safe: { label: 'безопасный', tone: 'text-success', icon: 'bi-shield-check' },
   sensitive: { label: 'внешние системы', tone: 'text-warning', icon: 'bi-shield-exclamation' },
@@ -422,6 +444,18 @@ export function ToolsPanel({
     if (source === 'builtin') return 'Встроенные';
     const id = source.startsWith('plugin:') ? source.slice(7) : source;
     return plugins.find((plugin) => plugin.id === id)?.name ?? id;
+  };
+
+  /**
+   * Обёртка вокруг MCP-сервера или плагин со своим кодом.
+   *
+   * Признак — объявленные сервера: у чистой обёртки они есть, у плагина с
+   * собственными инструментами их нет. Гибрид теоретически возможен, и тогда
+   * MCP — более информативная из двух меток.
+   */
+  const isMcp = (source: string): boolean => {
+    const id = source.startsWith('plugin:') ? source.slice(7) : source;
+    return (plugins.find((plugin) => plugin.id === id)?.mcpServers.length ?? 0) > 0;
   };
 
   const groups = new Map<string, ToolInfo[]>();
@@ -496,12 +530,7 @@ export function ToolsPanel({
               />
               <span className="text-[13px] font-semibold">{titleOf(source)}</span>
               <span className="text-[11px] text-text-dim">{list.length}</span>
-              {source !== 'builtin' && (
-                <span className="text-[10px] px-1.5 py-px rounded bg-surface-high text-text-dim">
-                  <i className="bi bi-puzzle mr-1" />
-                  плагин
-                </span>
-              )}
+              {source !== 'builtin' && <KindBadge mcp={isMcp(source)} />}
               <span className="flex-1 border-b border-border/60 ml-2" />
             </button>
 

@@ -3,7 +3,7 @@ import clsx from 'clsx';
 import type { AxonClient } from '@axon/client-sdk';
 import { parseMcpConfig } from '@axon/protocol';
 import type { CatalogEntry, PluginInfo, PluginSettingField, PluginStatus } from '@axon/protocol';
-import { Empty, Screen, TIER, Toggle } from './Panels.js';
+import { Empty, KindBadge, Screen, TIER, Toggle } from './Panels.js';
 
 /**
  * Состояние плагина глазами пользователя.
@@ -265,6 +265,7 @@ function CatalogWay({
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[13px] font-medium">{entry.name}</span>
+                <KindBadge mcp={entry.install.type === 'mcp'} />
                 {entry.tags.map((tag) => (
                   <span
                     key={tag}
@@ -464,6 +465,7 @@ function PluginCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[13px] font-medium">{plugin.name}</span>
+            <KindBadge mcp={plugin.mcpServers.length > 0} />
             <span className="text-[10px] text-text-dim font-mono">{plugin.version}</span>
             <span className={clsx('text-[10px]', status.tone)}>{status.label}</span>
           </div>
