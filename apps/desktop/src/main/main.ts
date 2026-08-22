@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, shell } from 'electron';
 import * as autostart from './autostart.js';
 import { ConnectionManager, type Connection } from './connection.js';
 
@@ -9,6 +9,64 @@ const here = __dirname;
 let window: BrowserWindow | null = null;
 let connections: ConnectionManager | null = null;
 let startupError: string | null = null;
+
+/**
+ * Меню правки — без него не работает вставка.
+ *
+ * В Electron горячие клавиши правки живут не в поле ввода, а в меню
+ * приложения: Ctrl+V, Ctrl+C, Ctrl+A и Ctrl+Z существуют ровно постольку,
+ * поскольку в меню есть пункты с соответствующими ролями. Приложение без
+ * меню выглядит обычным, пока человек не попробует вставить в поле пароль
+ * или ключ — и не сможет. Ввести руками длинный токен не предложишь.
+ *
+ * Само меню при этом не показывается: полоса заголовка у нас своя, и
+ * системная строка меню в неё не вписывается. Скрытая полоса ускорителей не
+ * отменяет — это разные вещи.
+ */
+function installEditMenu(): void {
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      { role: 'editMenu' },
+      // Перезагрузка и инструменты разработчика: в собранном приложении
+      // единственный способ посмотреть, что случилось в окне.
+      {
+        label: 'Вид',
+        submenu: [
+          { role: 'reload' },
+          { role: 'forceReload' },
+          { role: 'toggleDevTools' },
+          { type: 'separator' },
+          { role: 'resetZoom' },
+          { role: 'zoomIn' },
+          { role: 'zoomOut' },
+        ],
+      },
+    ]),
+  );
+}
+
+/**
+ * Правая кнопка в поле ввода.
+ *
+ * Своего контекстного меню Electron не рисует вовсе, и это второй способ,
+ * которым человек пытается вставить текст. Не найдя ни горячей клавиши, ни
+ * правой кнопки, он решает, что поле сломано, — и будет прав.
+ */
+function installContextMenu(target: BrowserWindow): void {
+  target.webContents.on('context-menu', (_event, params) => {
+    const editable = params.isEditable;
+    const selected = params.selectionText.trim().length > 0;
+    if (!editable && !selected) return;
+
+    Menu.buildFromTemplate([
+      { role: 'cut', label: 'Вырезать', enabled: editable && selected },
+      { role: 'copy', label: 'Копировать', enabled: selected },
+      { role: 'paste', label: 'Вставить', enabled: editable },
+      { type: 'separator' },
+      { role: 'selectAll', label: 'Выделить всё', enabled: editable },
+    ]).popup({ window: target });
+  });
+}
 
 function createWindow(): void {
   window = new BrowserWindow({
@@ -22,12 +80,17 @@ function createWindow(): void {
     titleBarStyle: 'hidden',
     titleBarOverlay: { color: '#141418', symbolColor: '#a0a0ac', height: 48 },
     show: false,
+    // Полоса меню скрыта, а само меню есть: иначе исчезнут ускорители правки.
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(here, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
+
+  window.setMenuBarVisibility(false);
+  installContextMenu(window);
 
   window.once('ready-to-show', () => window?.show());
 
@@ -88,6 +151,8 @@ app.on('second-instance', () => {
 });
 
 app.whenReady().then(async () => {
+  installEditMenu();
+
   try {
     connections = new ConnectionManager(app.getPath('userData'));
   } catch (e) {
