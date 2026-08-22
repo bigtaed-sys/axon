@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
-import { readPersona } from '@axon/protocol';
+import { compareVersions, formatVersion, readPersona } from '@axon/protocol';
 import type { ContentPart, Routine } from '@axon/protocol';
 import { ChatHeader } from './components/ChatHeader.js';
 import { ChatList } from './components/ChatList.js';
@@ -217,6 +217,21 @@ export function App() {
   const seesImages = Boolean(settings['vision.provider'] && settings['vision.model']);
   const persona = readPersona(settings);
 
+  /**
+   * Ядро отстало от приложения.
+   *
+   * Две разные причины, одно следствие. `coreOutdated` — расхождение ревизии
+   * протокола: ядро не знает команд, которые шлёт клиент. `coreBehind` —
+   * расхождение версии сборки: контракт тот же, а код старый, и правка,
+   * которую вы только что сделали, в нём не работает.
+   *
+   * Второе ловит то, чего первое не видит в принципе: правка промпта или
+   * логики протокол не меняет, поэтому по ревизии всё выглядит согласованным.
+   */
+  const coreVersion = client?.coreInfo?.version ?? '';
+  const coreBehind = coreVersion ? compareVersions(coreVersion, __APP_VERSION__) < 0 : false;
+  const coreStale = (coreOutdated || coreBehind) && connection?.mode === 'embedded';
+
   const createChat = async (): Promise<void> => {
     if (!client) return;
     const { conversation } = await client.call('conversation.create', {
@@ -418,11 +433,13 @@ export function App() {
         Чинится перезапуском, поэтому кнопка здесь же: иначе единственным
         способом узнать об этом была бы наполовину пустая панель.
       */}
-      {coreOutdated && connection?.mode === 'embedded' && (
+      {coreStale && (
         <div className="shrink-0 flex items-center gap-2 px-4 py-2 bg-warning/10 border-b border-warning/30 text-[12px] text-warning animate-fade-in">
           <i className="bi bi-arrow-clockwise" />
           <span className="flex-1">
-            Ядро старее приложения — часть возможностей ему пока неизвестна.
+            {coreBehind
+              ? `Ядро ${formatVersion(coreVersion)} старее приложения ${formatVersion(__APP_VERSION__)} — оно работает на старом коде.`
+              : 'Ядро старее приложения — часть возможностей ему пока неизвестна.'}
           </span>
           <button
             type="button"

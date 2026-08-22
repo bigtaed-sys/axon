@@ -2,6 +2,7 @@ import { build } from 'esbuild';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveVersion, buildStamp } from '../../../scripts/version.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
@@ -28,7 +29,10 @@ const common = {
   external,
   logLevel: 'info',
   // Версия пакета — единственный источник правды; в /health и в hello уходит она.
-  define: { __AXON_VERSION__: JSON.stringify(pkg.version) },
+  define: {
+    __AXON_VERSION__: JSON.stringify(resolveVersion(pkg.version)),
+    __AXON_BUILT_AT__: JSON.stringify(buildStamp()),
+  },
 };
 
 await build({

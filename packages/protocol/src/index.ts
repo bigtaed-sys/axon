@@ -16,5 +16,6 @@ export * from './routines.js';
 export * from './events.js';
 export * from './signals.js';
 export * from './settings.js';
+export * from './version.js';
 export * from './commands.js';
 export * from './envelope.js';

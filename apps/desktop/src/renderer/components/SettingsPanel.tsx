@@ -2,6 +2,8 @@ import { useEffect, useState, type ReactNode } from 'react';
 import clsx from 'clsx';
 import type { AxonClient } from '@axon/client-sdk';
 import {
+  compareVersions,
+  formatVersion,
   PERSONA_PRESETS,
   readImpulse,
   readPersona,
@@ -1081,8 +1083,13 @@ function AboutPage({
     <>
       <Section title="Axon" icon="bi-info-circle-fill">
         <dl className="text-[12px] space-y-2">
-          <Row label="Приложение" value={`v${__APP_VERSION__}`} />
-          <Row label="Ядро" value={core ? `v${core.version}` : '—'} />
+          <Row label="Приложение" value={formatVersion(__APP_VERSION__)} />
+          <Row label="Собрано" value={builtAt(__APP_BUILT_AT__)} />
+          <Row
+            label="Ядро"
+            value={core ? formatVersion(core.version) : '—'}
+            tone={core && compareVersions(core.version, __APP_VERSION__) < 0 ? 'warning' : undefined}
+          />
           <Row
             label="Режим ядра"
             value={connection?.mode === 'remote' ? 'удалённое' : 'на этом компьютере'}
@@ -1110,13 +1117,39 @@ function AboutPage({
   );
 }
 
-function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function Row({
+  label,
+  value,
+  mono,
+  tone,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  tone?: 'warning' | undefined;
+}) {
   return (
     <div className="flex items-baseline gap-3">
       <dt className="w-40 shrink-0 text-text-dim">{label}</dt>
-      <dd className={clsx('min-w-0 flex-1 truncate', mono && 'font-mono text-[11px]')}>{value}</dd>
+      <dd
+        className={clsx(
+          'min-w-0 flex-1 truncate',
+          mono && 'font-mono text-[11px]',
+          tone === 'warning' && 'text-warning',
+        )}
+      >
+        {value}
+        {tone === 'warning' && ' — старее приложения'}
+      </dd>
     </div>
   );
+}
+
+/** Время сборки человеческим языком. Дата тега в номере, дата сборки здесь. */
+function builtAt(iso: string): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return '—';
+  return at.toLocaleString('ru-RU', { dateStyle: 'long', timeStyle: 'short' });
 }
 
 export { Toggle };
