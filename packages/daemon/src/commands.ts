@@ -135,6 +135,7 @@ const handlers: Handlers = {
       conversationId: req.conversationId,
       parts: req.parts,
       scopes: device.scopes,
+      platform: device.platform,
       ...(req.allowTools ? { allowTools: req.allowTools } : {}),
       ...(req.budgetTokens === undefined ? {} : { budgetTokens: req.budgetTokens }),
     });

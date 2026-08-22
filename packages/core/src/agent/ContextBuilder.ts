@@ -1,4 +1,4 @@
-import type { ContentPart, Message } from '@axon/protocol';
+import type { ContentPart, DevicePlatform, Message } from '@axon/protocol';
 import type { ProviderMessage, ProviderPart } from '../providers/types.js';
 import type { Store } from '../storage/Store.js';
 import { selectForPrompt } from '../memory/Observations.js';
@@ -32,6 +32,15 @@ export interface ContributeInput {
   conversationId: string;
   /** Текст последнего сообщения пользователя — для поиска по релевантности. */
   userText: string;
+  /**
+   * Откуда задан вопрос.
+   *
+   * Это свойство прогона, а не разговора: один и тот же разговор ведут и с
+   * десктопа, и с телефона попеременно. Поэтому всё, что от него зависит,
+   * обязано быть изменчивым вкладом — положи его в системный блок, и кэш
+   * промпта будет обнуляться при каждом переходе между окнами.
+   */
+  platform?: DevicePlatform;
 }
 
 /** Чем разрешать ссылки на блобы в байты. Без него картинки в модель не поедут. */
@@ -78,6 +87,7 @@ export class ContextBuilder {
      * Умолчание разрешающее: старые вызовы вели себя именно так.
      */
     allowImages?: boolean;
+    platform?: DevicePlatform;
   }): Promise<BuiltContext> {
     const messages: ProviderMessage[] = [];
     const allowImages = input.allowImages ?? true;

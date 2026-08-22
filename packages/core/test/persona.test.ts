@@ -266,3 +266,29 @@ describe('наблюдения', () => {
     expect(types).toContain('observation.forgotten');
   });
 });
+
+describe('канал', () => {
+  /** Изменчивая часть промпта: то, что дописывается после истории. */
+  async function volatileText(platform?: 'telegram' | 'desktop'): Promise<string> {
+    const parts = await runtime.context.volatileParts({
+      conversationId: 'x',
+      userText: 'привет',
+      ...(platform ? { platform } : {}),
+    });
+    return parts.map((part) => part.text).join('\n');
+  }
+
+  it('из телеграма агент знает, что читают с телефона', async () => {
+    const text = await volatileText('telegram');
+
+    expect(text).toContain('из телеграма');
+    expect(text).toContain('Не рисуй таблицы');
+  });
+
+  it('из приложения ничего лишнего не добавляется', async () => {
+    // Указание про канал стоит токенов на каждом ходу. Платить за него там,
+    // где оно ничего не меняет, незачем.
+    expect(await volatileText('desktop')).not.toContain('телеграма');
+    expect(await volatileText()).not.toContain('телеграма');
+  });
+});

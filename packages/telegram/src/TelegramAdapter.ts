@@ -209,6 +209,7 @@ export class TelegramAdapter {
       conversationId: conversation,
       parts: [{ type: 'text', text }],
       scopes: device.scopes as Scope[],
+      platform: 'telegram',
     });
 
     this.waiting.set(runId, message.chat.id);

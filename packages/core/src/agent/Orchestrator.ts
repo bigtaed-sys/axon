@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type {
+  DevicePlatform,
   ContentPart,
   Message,
   PermissionRequest,
@@ -51,6 +52,8 @@ export interface StartRunInput {
   parts: ContentPart[];
   /** Права устройства, от имени которого идёт запрос. */
   scopes: Scope[];
+  /** Откуда пришёл вопрос: от этого зависит, каким должен быть ответ. */
+  platform?: DevicePlatform;
   /** Инструменты, разрешённые сверх прав устройства на этот прогон. */
   allowTools?: string[];
   /** Потолок расхода. `undefined` — взять из настроек, `null` — без потолка. */
@@ -206,6 +209,7 @@ export class Orchestrator {
         conversationId,
         userText,
         allowImages: !this.deps.vision?.enabled,
+        ...(input.platform ? { platform: input.platform } : {}),
       });
       if (transientNote) {
         built.messages.push({ role: 'user', parts: [{ type: 'text', text: transientNote }] });
