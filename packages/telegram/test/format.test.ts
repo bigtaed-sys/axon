@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { split, toTelegramHtml } from '../src/format.js';
+import { pickBody, plain, stripTags } from '../src/TelegramAdapter.js';
 
 describe('разметка для телеграма', () => {
   it('переводит жирный, курсив и ссылки', () => {
@@ -74,5 +75,41 @@ describe('разрезание длинных ответов', () => {
     const parts = split('я'.repeat(250), 100);
     expect(parts.length).toBeGreaterThan(1);
     expect(parts.join('').length).toBe(250);
+  });
+});
+
+describe('итог прогона', () => {
+  it('ответ показывается как есть', () => {
+    expect(pickBody('готово', 'end_turn')).toBe('готово');
+  });
+
+  it('пустой ответ при обычном завершении — это молчание, а не ошибка', () => {
+    // Агент мог ответить одним вызовом инструмента без текста. Показывать
+    // «прогон остановлен: end_turn» человеку незачем, это не про него.
+    expect(pickBody('', 'end_turn')).toBe('');
+  });
+
+  it('отказ объясняется, а не проглатывается', () => {
+    expect(pickBody('', 'budget_exhausted')).toContain('budget_exhausted');
+    expect(pickBody('', 'error', 'сеть отвалилась')).toContain('сеть отвалилась');
+  });
+
+  it('текст важнее причины остановки', () => {
+    // Успел сказать до того, как упёрся в потолок, — показываем сказанное.
+    expect(pickBody('половина ответа', 'budget_exhausted')).toBe('половина ответа');
+  });
+});
+
+describe('черновик', () => {
+  it('показывается без разметки', () => {
+    // Посреди генерации разметка почти всегда рваная: незакрытый тег —
+    // и телеграм отвергает правку целиком, черновик застывает.
+    expect(plain('**жирный** и `код`')).toBe('жирный и код');
+  });
+});
+
+describe('запасной путь без разметки', () => {
+  it('возвращает читаемый текст, когда телеграм отверг HTML', () => {
+    expect(stripTags('<b>важно</b>: a &lt; b')).toBe('важно: a < b');
   });
 });

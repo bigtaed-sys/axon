@@ -6,6 +6,7 @@ import type { CoreConfig, Runtime } from '@axon/core';
 import { createRuntime, logger } from '@axon/core';
 import { authenticate, PairingService } from './auth.js';
 import { PermissionHub } from './PermissionHub.js';
+import type { Signal } from '@axon/protocol';
 import { BOT_TOKEN_SECRET, TelegramAdapter } from '@axon/telegram';
 import { WsSession } from './WsSession.js';
 
@@ -50,6 +51,15 @@ export class Daemon {
   private readonly wss: WebSocketServer;
   private address: DaemonAddress | null = null;
   private telegram: TelegramAdapter | null = null;
+  /**
+   * Кто ещё слушает эфемерику, кроме сокетов.
+   *
+   * Сигналы — куски ответа, фазы, расход — не журналируются и до сих пор
+   * уходили только в WS-сессии. Телеграм живёт в этом же процессе и обычно без
+   * единого открытого сокета: без такой подписки он не увидел бы, как растёт
+   * ответ, и мог бы показать его только целиком в самом конце.
+   */
+  private readonly signalListeners = new Set<(signal: Signal) => void>();
   /** Разрешается, когда все установленные плагины отработали запуск. */
   pluginsReady: Promise<void> = Promise.resolve();
 
@@ -62,6 +72,7 @@ export class Daemon {
       sink: {
         emit: (signal) => {
           for (const session of this.sessions) session.emitSignal(signal);
+          for (const listener of this.signalListeners) listener(signal);
         },
       },
       // Рабочее состояние плагина едет тем же каналом, что и остальная
@@ -157,6 +168,10 @@ export class Daemon {
         pair: (code, name) => this.pairing.complete(code, name),
         resolvePermission: (requestId, allow) =>
           void this.permissions.resolve(requestId, allow ? 'allow_once' : 'deny_once'),
+        onSignal: (listener) => {
+          this.signalListeners.add(listener);
+          return () => this.signalListeners.delete(listener);
+        },
       },
       token,
     );
