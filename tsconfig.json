@@ -4,6 +4,7 @@
     { "path": "./packages/protocol" },
     { "path": "./packages/plugin-sdk" },
     { "path": "./packages/core" },
+    { "path": "./packages/telegram" },
     { "path": "./packages/daemon" },
     { "path": "./packages/client-sdk" }
   ]

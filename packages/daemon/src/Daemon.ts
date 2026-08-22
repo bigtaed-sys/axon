@@ -6,6 +6,7 @@ import type { CoreConfig, Runtime } from '@axon/core';
 import { createRuntime, logger } from '@axon/core';
 import { authenticate, PairingService } from './auth.js';
 import { PermissionHub } from './PermissionHub.js';
+import { BOT_TOKEN_SECRET, TelegramAdapter } from '@axon/telegram';
 import { WsSession } from './WsSession.js';
 
 /** Подставляется при сборке пакета; в разработке остаётся пометка. */
@@ -48,6 +49,7 @@ export class Daemon {
   private readonly server: http.Server;
   private readonly wss: WebSocketServer;
   private address: DaemonAddress | null = null;
+  private telegram: TelegramAdapter | null = null;
   /** Разрешается, когда все установленные плагины отработали запуск. */
   pluginsReady: Promise<void> = Promise.resolve();
 
@@ -114,7 +116,61 @@ export class Daemon {
       logger.error({ err: error.message }, 'плагины не поднялись');
     });
 
+    void this.syncTelegram();
+
+    /**
+     * Токен бота вписывают в настройках уже работающего ядра — значит,
+     * адаптер должен подниматься без перезапуска. Слушаем изменение секретов
+     * тем же журналом, что и клиенты: отдельного канала «для телеграма»,
+     * который однажды разойдётся с настоящим, здесь нет.
+     */
+    this.runtime.store.journal.subscribe((entry) => {
+      const event = entry.event;
+      if (event.type !== 'settings.changed') return;
+      if (!event.keys.includes(BOT_TOKEN_SECRET)) return;
+      void this.syncTelegram();
+    });
+
     return { address: this.address, bootstrapCode };
+  }
+
+  /**
+   * Поднять или погасить телеграм по наличию токена.
+   *
+   * Токен есть — бот работает, токена нет — не работает. Отдельного
+   * переключателя «включить телеграм» нет намеренно: он был бы вторым
+   * источником правды, и рано или поздно человек оказался бы с введённым
+   * токеном и выключенным ботом, не понимая почему.
+   */
+  private async syncTelegram(): Promise<void> {
+    const token = this.runtime.store.secrets.reveal(BOT_TOKEN_SECRET);
+
+    if (this.telegram) {
+      await this.telegram.stop();
+      this.telegram = null;
+    }
+    if (!token) return;
+
+    const adapter = new TelegramAdapter(
+      {
+        runtime: this.runtime,
+        pair: (code, name) => this.pairing.complete(code, name),
+        resolvePermission: (requestId, allow) =>
+          void this.permissions.resolve(requestId, allow ? 'allow_once' : 'deny_once'),
+      },
+      token,
+    );
+
+    try {
+      const { username } = await adapter.start();
+      this.telegram = adapter;
+      logger.info({ username }, 'телеграм на связи');
+    } catch (error) {
+      // Неверный токен — обычное дело при вводе руками. Ядро из-за этого
+      // падать не должно: остальные каналы работают.
+      logger.warn({ err: (error as Error).message }, 'телеграм не поднялся');
+      await adapter.stop().catch(() => undefined);
+    }
   }
 
   /**
@@ -151,6 +207,7 @@ export class Daemon {
     // Порядок важен: сначала снимаем прогоны, потом закрываем базу. Иначе
     // прогон, дошедший до записи в журнал после close(), роняет процесс.
     this.runtime.orchestrator.cancelAll();
+    await this.telegram?.stop();
     this.permissions.shutdown();
     for (const session of this.sessions) session.close();
     this.sessions.clear();
@@ -175,7 +232,9 @@ export class Daemon {
     for (const session of this.sessions) {
       if (session.canReceiveSignals()) return true;
     }
-    return false;
+    // Ядро на сервере обычно работает без открытого десктопа, и телеграм там —
+    // единственный, кто может подтвердить действие.
+    return this.telegram?.hasAudience ?? false;
   }
 
   // ─── HTTP ─────────────────────────────────────────────────────────────────

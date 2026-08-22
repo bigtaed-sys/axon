@@ -29,7 +29,7 @@ import { Toggle } from './Panels.js';
  * ядро, как выглядит приложение.
  */
 
-type PageId = 'provider' | 'vision' | 'persona' | 'impulse' | 'budget' | 'core' | 'access' | 'look' | 'about';
+type PageId = 'provider' | 'vision' | 'persona' | 'impulse' | 'budget' | 'telegram' | 'core' | 'access' | 'look' | 'about';
 
 interface Page {
   id: PageId;
@@ -44,6 +44,7 @@ const PAGES: Page[] = [
   { id: 'impulse', label: 'Инициатива', icon: 'bi-send-fill' },
   { id: 'budget', label: 'Расход', icon: 'bi-coin' },
   { id: 'core', label: 'Подключение', icon: 'bi-pc-display' },
+  { id: 'telegram', label: 'Телеграм', icon: 'bi-telegram' },
   { id: 'access', label: 'Доступ и запуск', icon: 'bi-shield-lock-fill' },
   { id: 'look', label: 'Оформление', icon: 'bi-palette-fill' },
   { id: 'about', label: 'О программе', icon: 'bi-info-circle-fill' },
@@ -51,7 +52,7 @@ const PAGES: Page[] = [
 
 const GROUPS: Array<{ title: string; ids: PageId[] }> = [
   { title: 'Агент', ids: ['provider', 'vision', 'persona', 'impulse', 'budget'] },
-  { title: 'Ядро', ids: ['core', 'access'] },
+  { title: 'Ядро', ids: ['core', 'telegram', 'access'] },
   { title: 'Приложение', ids: ['look', 'about'] },
 ];
 
@@ -191,6 +192,7 @@ export function SettingsPanel({
           {page === 'vision' && <VisionPage {...shared} />}
           {page === 'persona' && <PersonaPage {...shared} />}
           {page === 'impulse' && <ImpulsePage {...shared} />}
+          {page === 'telegram' && <TelegramPage {...shared} />}
           {page === 'budget' && <BudgetPage {...shared} />}
           {page === 'core' && (
             <CorePage
@@ -797,6 +799,127 @@ function clamp(raw: string, min: number, max: number, fallback: number): number 
   const value = Number(raw);
   if (!Number.isFinite(value)) return fallback;
   return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+/** Кто из телеграма привязан. Ключ — id чата, значение пишет адаптер. */
+interface TelegramChat {
+  deviceId: string;
+  name: string;
+}
+
+function TelegramPage({ values, secrets, save, saveSecret }: PageProps) {
+  const [draft, setDraft] = useState('');
+  const secret = secrets.find((item) => item.key === 'telegram.botToken');
+  const chats = (values['telegram.chats'] ?? {}) as Record<string, TelegramChat>;
+  const bound = Object.entries(chats);
+
+  return (
+    <>
+      <Section
+        title="Бот"
+        icon="bi-telegram"
+        hint="Телеграм — это ещё одно окно к тому же агенту, а не отдельный чат. Разговор общий с десктопом: закрыли ноутбук — продолжили с телефона с того же места."
+      >
+        <Field
+          label="Токен бота"
+          hint="Создайте бота у @BotFather, командой /newbot, и вставьте выданный токен. Он хранится в ядре зашифрованным."
+        >
+          <div className="flex gap-2">
+            <input
+              type="password"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder={secret?.set ? `задан, оканчивается на ${secret.hint}` : 'токен не задан'}
+              className="input flex-1"
+            />
+            <button
+              type="button"
+              disabled={!draft.trim()}
+              onClick={async () => {
+                await saveSecret('telegram.botToken', draft.trim());
+                setDraft('');
+              }}
+              className="h-9 px-4 rounded-xl2 bg-accent text-accent-fg hover:bg-accent-hover text-[13px] font-medium transition-colors disabled:opacity-40"
+            >
+              Записать
+            </button>
+          </div>
+        </Field>
+
+        {secret?.set ? (
+          <p className="text-[11px] text-success flex items-center gap-1.5">
+            <i className="bi bi-check-circle-fill" />
+            бот поднят — токен есть, отдельного переключателя не нужно
+          </p>
+        ) : (
+          <p className="text-[11px] text-text-dim leading-relaxed">
+            Пока токена нет, бот не работает. Отдельного переключателя «включить» нет намеренно:
+            он был бы вторым источником правды, и однажды вы оказались бы с введённым токеном и
+            выключенным ботом, не понимая почему.
+          </p>
+        )}
+      </Section>
+
+      <Section
+        title="Кто может писать"
+        icon="bi-person-check-fill"
+        hint="Только привязанные. Чужой, нашедший бота, получает отказ и не тратит ваши деньги — обращения к модели не будет вовсе."
+      >
+        {bound.length === 0 ? (
+          <p className="text-[12px] text-text-muted leading-relaxed">
+            Никто не привязан. Создайте код подключения на экране «Устройства» и отправьте его
+            боту командой <code className="font-mono text-[11px]">/start КОД</code> — это тот же
+            механизм, что у любого другого устройства.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {bound.map(([chatId, chat]) => (
+              <div
+                key={chatId}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-bg border border-border"
+              >
+                <i className="bi bi-telegram text-accent" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] truncate">{chat.name || 'без имени'}</p>
+                  <p className="text-[11px] text-text-dim font-mono">{chatId}</p>
+                </div>
+                <button
+                  type="button"
+                  title="Отвязать"
+                  onClick={() => {
+                    const rest = { ...chats };
+                    delete rest[chatId];
+                    void save({ 'telegram.chats': rest });
+                  }}
+                  className="shrink-0 h-8 px-3 rounded-lg border border-border text-[12px] text-text-muted hover:border-danger hover:text-danger transition-colors"
+                >
+                  Отвязать
+                </button>
+              </div>
+            ))}
+            <p className="text-[11px] text-text-dim leading-relaxed">
+              Отвязать здесь — значит перестать принимать сообщения из этого чата. Само
+              устройство остаётся в списке на экране «Устройства», отозвать его нужно там.
+            </p>
+          </div>
+        )}
+      </Section>
+
+      <Section title="Что умеет" icon="bi-list-check">
+        <ul className="text-[12px] text-text-muted leading-relaxed space-y-1.5">
+          <li>· Отвечает в том же разговоре, что и десктоп — контекст один на все окна.</li>
+          <li>
+            · Подтверждает опасные действия кнопками под сообщением. Здесь телеграм даже удобнее
+            десктопа, поэтому ограничивать его безопасными инструментами не пришлось.
+          </li>
+          <li>
+            · Присылает то, что агент написал сам по своему почину, — если инициатива включена.
+            Ради этого она и делалась: до человека за компьютером достучаться можно и так.
+          </li>
+        </ul>
+      </Section>
+    </>
+  );
 }
 
 function BudgetPage({ values, save }: PageProps) {

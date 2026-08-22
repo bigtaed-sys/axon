@@ -2,7 +2,13 @@
   "name": "@axon-assistant/core",
   "version": "0.1.0",
   "description": "Ядро Axon: персональный AI-агент, который живёт на вашей машине",
-  "keywords": ["ai", "agent", "assistant", "self-hosted", "llm"],
+  "keywords": [
+    "ai",
+    "agent",
+    "assistant",
+    "self-hosted",
+    "llm"
+  ],
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -16,7 +22,10 @@
   "bin": {
     "axon": "./dist/cli.js"
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "engines": {
     "node": ">=22.5"
   },
@@ -41,6 +50,7 @@
     "@axon/core": "*",
     "@axon/protocol": "*",
     "@types/ws": "^8.5.13",
-    "esbuild": "^0.24.2"
+    "esbuild": "^0.24.2",
+    "@axon/telegram": "*"
   }
 }
