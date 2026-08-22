@@ -6,6 +6,7 @@ import { createFileTools } from './files.js';
 import { createHttpTools } from './http.js';
 import { createMemoryTools } from './memory.js';
 import { createPersonaTools } from './persona.js';
+import { createRecallTools } from './recall.js';
 import { createShellTools } from './shell.js';
 import { createSkillTools } from './skills.js';
 import { createSystemTools } from './system.js';
@@ -14,6 +15,7 @@ import { PathGuard } from './paths.js';
 export { createSkillTools } from './skills.js';
 export { createMemoryTools } from './memory.js';
 export { createPersonaTools } from './persona.js';
+export { createRecallTools } from './recall.js';
 export { createFileTools } from './files.js';
 export { createShellTools } from './shell.js';
 export { createHttpTools } from './http.js';
@@ -39,6 +41,7 @@ export function createBuiltinTools(store: Store, skills: SkillRegistry): ToolDef
   return [
     ...createMemoryTools(store),
     ...createPersonaTools(store),
+    ...createRecallTools(store),
     ...createSkillTools(skills),
     ...createFileTools(guard),
     ...createShellTools(guard),

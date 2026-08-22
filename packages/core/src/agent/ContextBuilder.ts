@@ -1,6 +1,7 @@
 import type { ContentPart, DevicePlatform, Message } from '@axon/protocol';
 import type { ProviderMessage, ProviderPart } from '../providers/types.js';
 import type { Store } from '../storage/Store.js';
+import { selectFacts } from '../memory/Facts.js';
 import { selectForPrompt } from '../memory/Observations.js';
 import { composePersona } from './Persona.js';
 import { estimateTokens } from './tokens.js';
@@ -115,7 +116,13 @@ export class ContextBuilder {
     const persona = composePersona(this.store.settings.all());
     if (persona) parts.push(persona);
 
-    const facts = this.store.facts.list();
+    /**
+     * Факты отбираются, а не вываливаются целиком.
+     *
+     * Сказанное человеком идёт всегда; выведенное агентом — по совпадению слов
+     * с вопросом. Подробности отбора и почему он такой грубый — в `selectFacts`.
+     */
+    const facts = selectFacts(this.store.facts.list(), input.userText);
     if (facts.length > 0) {
       parts.push(
         `Что известно о пользователе:\n${facts.map((f) => `- ${f.key}: ${f.value}`).join('\n')}`,
