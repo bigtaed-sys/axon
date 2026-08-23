@@ -38,7 +38,7 @@ const version = resolveVersion();
 // повторить: коммит уедет, а пакет в реестре останется навсегда.
 if (!/^\d+\.\d+\.\d+$/.test(version)) {
   console.error(`Версия «${version}» не тег релиза.`);
-  console.error('Поставьте тег на этот коммит: git tag -a v2026.8.23 -m "…"');
+  console.error('Поставьте тег на этот коммит: git tag -a v2026.8.24 -m "…"');
   process.exit(1);
 }
 
