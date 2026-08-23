@@ -100,7 +100,13 @@ function EmbeddedTab({
         </p>
       )}
 
-      {failure && <p className="mt-3 text-[12px] text-danger">{failure}</p>}
+      {failure && (
+        // Переносы строк в отказе значащие: подробный разбор «почему не
+        // дозвонились» без них слипается в кашу.
+        <p className="mt-3 text-[12px] text-danger leading-relaxed whitespace-pre-line">
+          {failure}
+        </p>
+      )}
 
       {!active && (
         <button
@@ -224,7 +230,13 @@ function RemoteTab({
       <label className="block text-[12px] font-medium mt-4 mb-1.5">Как назвать это устройство</label>
       <input value={name} onChange={(e) => setName(e.target.value)} className="input" />
 
-      {failure && <p className="mt-3 text-[12px] text-danger">{failure}</p>}
+      {failure && (
+        // Переносы строк в отказе значащие: подробный разбор «почему не
+        // дозвонились» без них слипается в кашу.
+        <p className="mt-3 text-[12px] text-danger leading-relaxed whitespace-pre-line">
+          {failure}
+        </p>
+      )}
 
       <button
         type="button"

@@ -25,6 +25,30 @@ function load(): Connection | null {
   }
 }
 
+/**
+ * Почему не дозвонились.
+ *
+ * Телефон обрывает такие запросы в трёх разных местах — система не пускает
+ * незашифрованный трафик, не пускает в локальную сеть, или до ядра просто нет
+ * дороги, — и во всех случаях браузер отдаёт одно и то же пустое «failed to
+ * fetch». Различить их из приложения нельзя, поэтому честнее показать всё
+ * сразу: одна из трёх строчек окажется той самой, и человек проверит её сам,
+ * вместо того чтобы гадать.
+ */
+function unreachable(target: string, error: unknown): string {
+  const reason = error instanceof Error ? error.message : String(error);
+  return [
+    `Не удалось достучаться до ${target} (${reason}).`,
+    '',
+    `1. Откройте ${target}/health в браузере телефона. Не отвечает — дело в сети:`,
+    '   ядро слушает только себя (нужен axon start --host 0.0.0.0) или запросы',
+    '   не пускает файрвол той машины.',
+    '2. Разрешение «устройства поблизости» в настройках приложения — без него',
+    '   свежие Android не пускают в локальную сеть вовсе.',
+    '3. Адрес — тот, что печатает само ядро при запуске, вместе с портом.',
+  ].join('\n');
+}
+
 /** Адрес без хвоста: человек копирует его из консоли вместе со слэшем и текстом. */
 function normalize(input: string): string {
   const text = input.trim().replace(/\/+$/, '');
@@ -38,8 +62,11 @@ export function installMobileHost(app: { version: string; builtAt: string }): vo
     connection: async () => ({ connection: load(), error: null }),
 
     probe: async (url) => {
-      const response = await fetch(`${normalize(url)}/health`).catch(() => null);
-      if (!response?.ok) throw new Error('Ядро не отвечает по этому адресу');
+      const target = normalize(url);
+      const response = await fetch(`${target}/health`).catch((error: unknown) => {
+        throw new Error(unreachable(target, error));
+      });
+      if (!response.ok) throw new Error(`Ядро ответило ошибкой ${response.status}`);
       return (await response.json()) as CoreProbe;
     },
 
@@ -49,8 +76,8 @@ export function installMobileHost(app: { version: string; builtAt: string }): vo
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code: code.trim().toUpperCase(), name, platform: 'mobile' }),
-      }).catch(() => {
-        throw new Error(`Не удалось достучаться до ${target}. Проверьте адрес и что ядро запущено.`);
+      }).catch((error: unknown) => {
+        throw new Error(unreachable(target, error));
       });
 
       if (response.status === 403) {
