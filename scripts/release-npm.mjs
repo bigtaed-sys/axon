@@ -65,6 +65,10 @@ for (const dir of PACKAGES) {
       cwd: path.join(root, dir),
       stdio: 'inherit',
       shell: process.platform === 'win32',
+      // Сборка пакета зовёт resolveVersion, а дерево уже грязное — из-за
+      // версии, которую мы только что в него вписали. Без подсказки в бандл
+      // уехало бы `2026.8.24-dirty`.
+      env: { ...process.env, AXON_VERSION: version },
     });
   } catch {
     // Стек вызовов node здесь не нужен: npm уже напечатал, что не так, и

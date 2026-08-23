@@ -23,6 +23,17 @@ import { execFileSync } from 'node:child_process';
  * то есть версию *старше* тега, а на деле она новее.
  */
 export function resolveVersion(fallback = '0.0.0-dev') {
+  /**
+   * Явно переданный номер главнее git.
+   *
+   * Публикация в npm вынуждена вписать версию в package.json — и этим делает
+   * дерево грязным. `git describe --dirty` честно добавляет `-dirty`, и в
+   * реестр уезжает пакет, сообщающий пользователю, что он собран из середины
+   * работы. Один раз так и вышло.
+   */
+  const given = process.env['AXON_VERSION'];
+  if (given) return given;
+
   try {
     const described = execFileSync(
       'git',
