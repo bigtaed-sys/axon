@@ -47,6 +47,17 @@ const TIMEOUT_MS = 8_000;
 /** Потолок ответа: каталог — это килобайты, а не мегабайты. */
 const MAX_BYTES = 2 * 1024 * 1024;
 
+/**
+ * Куда идти за каталогом.
+ *
+ * Пустая настройка — не адрес: человек мог стереть поле, и ходить в никуда
+ * из-за этого неправильно. Тогда берётся умолчание.
+ */
+export function catalogUrl(store: { settings: { get<T>(key: string): T | undefined } }): string {
+  const custom = store.settings.get<string>(CATALOG_URL_SETTING);
+  return custom?.trim() || DEFAULT_CATALOG_URL;
+}
+
 export type CatalogOrigin = 'network' | 'cache' | 'bundled';
 
 export interface CatalogResult {
@@ -100,13 +111,8 @@ export class CatalogSource {
     this.fetchedAtMs = Date.now();
   }
 
-  private url(): string {
-    const custom = this.store.settings.get<string>(CATALOG_URL_SETTING);
-    return custom?.trim() || DEFAULT_CATALOG_URL;
-  }
-
   private async download(): Promise<CatalogResult | null> {
-    const url = this.url();
+    const url = catalogUrl(this.store);
     const abort = new AbortController();
     const timer = setTimeout(() => abort.abort(), TIMEOUT_MS);
 

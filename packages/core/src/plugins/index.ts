@@ -13,5 +13,11 @@ export type { RpcFrame } from './rpc.js';
 export type * from './api.js';
 export { scaffold } from './scaffold.js';
 export type { ScaffoldResult } from './scaffold.js';
-export { CatalogSource, CATALOG_URL_SETTING, DEFAULT_CATALOG_URL, parse as parseCatalog } from './CatalogSource.js';
+export {
+  CatalogSource,
+  catalogUrl,
+  CATALOG_URL_SETTING,
+  DEFAULT_CATALOG_URL,
+  parse as parseCatalog,
+} from './CatalogSource.js';
 export type { CatalogResult, CatalogOrigin } from './CatalogSource.js';

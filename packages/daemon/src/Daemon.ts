@@ -1,5 +1,6 @@
 import http from 'node:http';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { WebSocketServer } from 'ws';
 import type { CoreConfig, Runtime } from '@axon/core';
@@ -36,7 +37,51 @@ export interface DaemonOptions {
 export interface DaemonAddress {
   host: string;
   port: number;
+  /**
+   * Адрес, по которому к ядру действительно можно обратиться.
+   *
+   * Не то же самое, что `host`: при `--host 0.0.0.0` ядро слушает все
+   * интерфейсы, но `http://0.0.0.0:8787` — не адрес, а маска. Обратиться по
+   * ней нельзя, а её печатали и складывали в `core.json`, откуда её брали и
+   * `axon status`, и десктоп.
+   */
   url: string;
+  /** Куда стучаться с других устройств. Пусто, если слушаем только себя. */
+  reachable: string[];
+}
+
+/** Маска «слушать всё», а не адрес: обратиться по ней нельзя. */
+function isWildcard(host: string): boolean {
+  return host === '0.0.0.0' || host === '::' || host === '';
+}
+
+/** IPv6 в URL пишется в скобках, иначе двоеточия съедает разбор порта. */
+function asAuthority(host: string, port: number): string {
+  return host.includes(':') ? `http://[${host}]:${port}` : `http://${host}:${port}`;
+}
+
+/**
+ * Адреса, по которым ядро видно с других машин.
+ *
+ * Человек, поднявший ядро на сервере, следующим действием вводит адрес в
+ * приложении. Без этого списка он ищет его сам — `ip a`, панель хостера,
+ * догадки, — хотя ядро знает его лучше.
+ */
+function reachableUrls(port: number): string[] {
+  const found: Array<{ address: string; v4: boolean }> = [];
+  for (const addresses of Object.values(os.networkInterfaces())) {
+    for (const item of addresses ?? []) {
+      if (item.internal) continue;
+      // Link-local — адрес для разговора внутри одного сегмента, и без
+      // указания интерфейса (`%eth0`) он не работает даже там. В списке
+      // «куда подключаться» это чистый шум: их обычно больше, чем настоящих.
+      if (item.address.startsWith('fe80') || item.address.startsWith('169.254.')) continue;
+      found.push({ address: item.address, v4: item.family === 'IPv4' });
+    }
+  }
+  // Сначала IPv4: их набирают руками, и человек скорее узнает свой адрес в них.
+  found.sort((a, b) => Number(b.v4) - Number(a.v4));
+  return found.map((item) => asAuthority(item.address, port));
 }
 
 /**
@@ -127,7 +172,12 @@ export class Daemon {
 
     const actual = this.server.address();
     const boundPort = typeof actual === 'object' && actual ? actual.port : port;
-    this.address = { host, port: boundPort, url: `http://${host}:${boundPort}` };
+    this.address = {
+      host,
+      port: boundPort,
+      url: isWildcard(host) ? `http://127.0.0.1:${boundPort}` : asAuthority(host, boundPort),
+      reachable: isWildcard(host) ? reachableUrls(boundPort) : [],
+    };
 
     const bootstrapCode = this.pairing.ensureBootstrapCode();
     this.announce();
@@ -296,6 +346,7 @@ export class Daemon {
       JSON.stringify(
         {
           url: this.address!.url,
+          reachable: this.address!.reachable,
           pid: process.pid,
           coreId: this.runtime.coreId,
           mode: this.options.mode ?? 'standalone',

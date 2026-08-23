@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createBackup, createRuntime, resolveConfig, restoreBackup, scaffold } from '@axon/core';
@@ -11,6 +12,8 @@ interface CoreRecord {
   coreId: string;
   mode: string;
   startedAt: string;
+  /** Адреса для других устройств. Старое ядро их не писало — отсюда `?`. */
+  reachable?: string[];
 }
 
 /** Что ядро о себе заявило. `null`, если оно не запущено. */
@@ -80,13 +83,45 @@ async function start(args: string[]): Promise<void> {
   // десктопом, но открытое в сеть, для клиента всё равно встроенное.
   const mode = valueOf(args, '--mode') === 'embedded' ? 'embedded' : 'standalone';
 
+  // Два ядра на одной папке данных — это две программы, пишущие в одну базу.
+  // Поймать это по «порт занят» нельзя: ядра могли получить разные порты, а
+  // Windows пускает второго слушателя на 127.0.0.1 поверх 0.0.0.0.
+  const running = readRecord();
+  if (running && (await alive(running.url))) {
+    return fail(`Ядро уже работает: ${running.url}, pid ${running.pid}.\n  Остановить: axon stop`);
+  }
+
+  if (args.includes('--detach') || args.includes('-d')) return await detach(args);
+
   const daemon = new Daemon({ host, port, mode });
-  const { address, bootstrapCode } = await daemon.start();
+
+  let started;
+  try {
+    started = await daemon.start();
+  } catch (error) {
+    // Две ошибки, которые получает каждый, кто первый раз поднимает ядро на
+    // сервере. Стектрейс на них не отвечает ни на один вопрос.
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'EADDRINUSE') {
+      return fail(`Порт ${port} занят. Может быть, ядро уже работает: axon status`);
+    }
+    if (code === 'EADDRNOTAVAIL') {
+      return fail(
+        `Адрес ${host} не принадлежит этой машине.\n` +
+          '  Чтобы пускать другие устройства, слушают все интерфейсы: axon start --host 0.0.0.0',
+      );
+    }
+    throw error;
+  }
+  const { address, bootstrapCode } = started;
 
   if (asJson) {
-    console.log(JSON.stringify({ ready: true, url: address.url, bootstrapCode }));
+    console.log(
+      JSON.stringify({ ready: true, url: address.url, reachable: address.reachable, bootstrapCode }),
+    );
   } else {
     console.log(`Axon слушает ${address.url}`);
+    describeReach(address.host, address.reachable);
   }
   if (bootstrapCode && !asJson) {
     console.log('');
@@ -102,6 +137,97 @@ async function start(args: string[]): Promise<void> {
   };
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
+}
+
+/** Где искать, если ядро не поднялось: вывод фонового процесса пишется сюда. */
+function logPath(): string {
+  return path.join(resolveConfig().dataDir, 'axon.log');
+}
+
+/**
+ * Запуск фоном.
+ *
+ * Без него `axon start` держит терминал, и закрытая по SSH консоль убивает
+ * ядро вместе с собой: сессия уходит, процесс получает SIGHUP. На сервере это
+ * не мелкое неудобство, а «поставил и потерял».
+ *
+ * Отвязанный процесс переживает и выход из сессии, и закрытое окно. Вывод
+ * уходит в файл: иначе он просто пропадёт, а первое, что спрашивают, когда
+ * ядро не поднялось, — «что оно написало».
+ *
+ * Родитель не уходит молча: он ждёт, пока ядро действительно ответит по
+ * /health. Сообщение «запущено» сразу после `spawn` означало бы только то, что
+ * процесс создан, — а он мог упасть через секунду на занятом порте.
+ */
+async function detach(args: string[]): Promise<void> {
+  const config = resolveConfig();
+  fs.mkdirSync(config.dataDir, { recursive: true });
+
+  const file = logPath();
+  const out = fs.openSync(file, 'a');
+  const since = Date.now();
+
+  const child = spawn(
+    process.execPath,
+    [process.argv[1] ?? '', 'start', ...args.filter((arg) => arg !== '--detach' && arg !== '-d')],
+    { detached: true, stdio: ['ignore', out, out], windowsHide: true },
+  );
+  child.unref();
+  fs.closeSync(out);
+
+  const record = await waitReady(since);
+  if (!record) {
+    return fail(`Ядро не ответило за 20 секунд. Что оно написало — в ${file}`);
+  }
+
+  console.log(`Axon работает фоном, pid ${record.pid}`);
+  console.log(`  ${record.url}`);
+  describeReach('', record.reachable ?? []);
+  console.log(`  вывод: ${file}`);
+  console.log('  остановить: axon stop');
+
+  // Код печатает и фоновый процесс — но его вывод уехал в файл, а нужен он
+  // ровно сейчас, в этом терминале.
+  const codeFile = path.join(config.dataDir, 'bootstrap.code');
+  const code = fs.existsSync(codeFile) ? fs.readFileSync(codeFile, 'utf8').trim() : '';
+  if (code) {
+    console.log('');
+    console.log('  Устройств пока нет. Код для первого подключения:');
+    console.log(`      ${code}`);
+    console.log('');
+  }
+}
+
+/** Отвечает ли ядро по этому адресу. Запись могла остаться от убитого процесса. */
+async function alive(url: string): Promise<boolean> {
+  return await fetch(`${url}/health`)
+    .then((r) => r.ok)
+    .catch(() => false);
+}
+
+/** Ждём не процесс, а ответ по /health: поднявшийся и упавший выглядят одинаково. */
+async function waitReady(since: number): Promise<CoreRecord | null> {
+  const deadline = Date.now() + 20_000;
+  while (Date.now() < deadline) {
+    const record = readRecord();
+    // Запись могла остаться от прошлого запуска — берём только свежую.
+    if (record && Date.parse(record.startedAt) >= since && (await alive(record.url))) {
+      return record;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  }
+  return null;
+}
+
+/** Куда стучаться с других устройств — и почему список пуст, если он пуст. */
+function describeReach(host: string, reachable: string[]): void {
+  if (reachable.length > 0) {
+    console.log(`  с других устройств: ${reachable.join(', ')}`);
+    return;
+  }
+  if (host === '127.0.0.1' || host === 'localhost') {
+    console.log('  видно только на этой машине; для других устройств: --host 0.0.0.0');
+  }
 }
 
 async function secret(args: string[]): Promise<void> {
@@ -143,11 +269,7 @@ async function status(): Promise<void> {
   const record = readRecord();
   if (!record) return console.log('Ядро не запущено');
 
-  const alive = await fetch(`${record.url}/health`)
-    .then((r) => r.ok)
-    .catch(() => false);
-
-  if (!alive) {
+  if (!(await alive(record.url))) {
     // Файл есть, а ядра нет: процесс убили жёстко и убраться он не успел.
     console.log(`Ядро не отвечает по ${record.url} (запись устарела)`);
     return;
@@ -155,6 +277,7 @@ async function status(): Promise<void> {
 
   console.log(`Ядро на связи: ${record.url}`);
   console.log(`  pid ${record.pid}, запущено ${new Date(record.startedAt).toLocaleString('ru')}`);
+  describeReach('', record.reachable ?? []);
 }
 
 function stop(): void {
@@ -426,6 +549,7 @@ function usage(): void {
 
   axon start [--host 127.0.0.1] [--port 8787]   запустить ядро
       --host 0.0.0.0                            открыть для других устройств
+      --detach, -d                              фоном: переживёт закрытый терминал
   axon status                                   запущено ли ядро и где
   axon stop                                     остановить ядро
   axon secret list                              какие секреты заданы

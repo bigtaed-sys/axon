@@ -2,7 +2,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { CatalogSource, createRuntime, parseCatalog, type Runtime } from '../src/index.js';
+import {
+  CatalogSource,
+  catalogUrl,
+  createRuntime,
+  DEFAULT_CATALOG_URL,
+  parseCatalog,
+  type Runtime,
+} from '../src/index.js';
 
 let runtime: Runtime;
 let tmpDir: string;
@@ -87,11 +94,13 @@ describe('источник каталога', () => {
     expect((await new CatalogSource(runtime.store, tmpDir).get()).origin).toBe('bundled');
   });
 
-  it('адрес берётся из настроек', async () => {
-    // Чтобы можно было указать свой форк или внутренний адрес в организации.
+  it('адрес берётся из настроек, пустая настройка — не адрес', () => {
+    // Свой форк или внутренний адрес в организации.
+    runtime.store.updateSettings({ values: { 'plugins.catalogUrl': 'https://свой/каталог.json' } });
+    expect(catalogUrl(runtime.store)).toBe('https://свой/каталог.json');
+
+    // Поле стёрли — ходить в никуда из-за этого неправильно.
     runtime.store.updateSettings({ values: { 'plugins.catalogUrl': '   ' } });
-    // Пустая настройка — не адрес: падаем на умолчание, а не ходим в никуда.
-    const result = await new CatalogSource(runtime.store, tmpDir).get();
-    expect(['network', 'cache', 'bundled']).toContain(result.origin);
+    expect(catalogUrl(runtime.store)).toBe(DEFAULT_CATALOG_URL);
   });
 });
