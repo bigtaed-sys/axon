@@ -9,6 +9,7 @@ import rehypeHighlight from 'rehype-highlight';
 import clsx from 'clsx';
 import { Mermaid } from './Mermaid.js';
 import { SANITIZE_SCHEMA } from './markdown-schema.js';
+import { copyText } from '../clipboard.js';
 
 /**
  * Рендер Markdown в сообщениях агента.
@@ -329,13 +330,9 @@ function CodeBlock({
   const [copied, setCopied] = useState(false);
 
   const copy = async (): Promise<void> => {
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // В некоторых контекстах буфер обмена недоступен — молча ничего не делаем.
-    }
+    if (!(await copyText(code))) return;
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
   };
 
   return (

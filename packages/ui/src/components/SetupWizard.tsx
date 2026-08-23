@@ -4,6 +4,7 @@ import type { AxonClient } from '@axon/client-sdk';
 import type { ProviderInfo } from '@axon/protocol';
 import type { Connection } from '../useAxon.js';
 import { host } from '../host.js';
+import { copyText } from '../clipboard.js';
 
 /**
  * Что показать при первом знакомстве.
@@ -315,7 +316,7 @@ function Remote({ onBack, onConnected }: { onBack: () => void; onConnected: () =
           <button
             type="button"
             onClick={async () => {
-              await navigator.clipboard.writeText(install);
+              if (!(await copyText(install))) return;
               setCopied(true);
               setTimeout(() => setCopied(false), 1500);
             }}
