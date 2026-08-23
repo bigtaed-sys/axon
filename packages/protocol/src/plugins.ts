@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { zTimestamp } from './primitives.js';
+import { zId, zTimestamp } from './primitives.js';
 import { zRiskTier } from './domain.js';
 
 /**
@@ -179,8 +179,8 @@ export const zPluginStatus = z.enum(['disabled', 'starting', 'ready', 'failed', 
 export type PluginStatus = z.infer<typeof zPluginStatus>;
 
 export const zPluginOrigin = z.object({
-  type: z.enum(['catalog', 'git', 'link', 'builtin']),
-  /** Идентификатор в каталоге, URL репозитория или путь на диске. */
+  type: z.enum(['catalog', 'git', 'link', 'builtin', 'archive']),
+  /** Идентификатор в каталоге, URL репозитория, путь на диске или имя архива. */
   ref: z.string(),
 });
 export type PluginOrigin = z.infer<typeof zPluginOrigin>;
@@ -307,10 +307,16 @@ export const zPluginSource = z.discriminatedUnion('type', [
     transport: zMcpTransport,
   }),
   /**
-   * Папка на машине ядра. В интерфейсе этого нет намеренно — только CLI:
-   * это режим разработки плагина, а не способ его поставить.
+   * Папка на машине ядра. Подключается по месту, а не копируется — это режим
+   * разработки: правишь файлы, перезапускаешь плагин, видишь результат.
    */
   z.object({ type: z.literal('link'), path: z.string().min(1) }),
+  /**
+   * Архив, загруженный человеком. Едет блобом, как вложение к сообщению:
+   * гонять мегабайты через WebSocket, у которого своя очередь кадров, — верный
+   * способ подвесить всё остальное на время загрузки.
+   */
+  z.object({ type: z.literal('archive'), blobId: zId, name: z.string().max(200).optional() }),
 ]);
 export type PluginSource = z.infer<typeof zPluginSource>;
 

@@ -44,16 +44,7 @@ const PERMISSION: Record<string, string> = {
   journal: 'чтение переписки',
 };
 
-export function PluginsPanel({
-  plugins,
-  client,
-  local,
-}: {
-  plugins: PluginInfo[];
-  client: AxonClient;
-  /** Ядро запущено на этой же машине. */
-  local: boolean;
-}) {
+export function PluginsPanel({ plugins, client }: { plugins: PluginInfo[]; client: AxonClient }) {
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -112,7 +103,6 @@ export function PluginsPanel({
         <AddDialog
           client={client}
           installed={new Set(plugins.map((p) => p.id))}
-          local={local}
           onClose={() => setAdding(false)}
         />
       )}
@@ -134,45 +124,44 @@ function Failure({ text, onClose }: { text: string; onClose: () => void }) {
 
 // ─── Добавление ─────────────────────────────────────────────────────────────
 
-type Way = 'catalog' | 'mcp' | 'git' | 'folder';
-
-const WAYS: Array<{ id: Way; title: string; icon: string }> = [
-  { id: 'catalog', title: 'Каталог', icon: 'bi-box-seam' },
-  { id: 'mcp', title: 'MCP-сервер', icon: 'bi-plug' },
-  { id: 'git', title: 'Репозиторий', icon: 'bi-git' },
-  { id: 'folder', title: 'Папка', icon: 'bi-folder2-open' },
-];
-
-type RunFn = (label: string, action: () => Promise<unknown>) => Promise<void>;
-
 /**
- * Окно установки.
+ * Окно установки: один экран, а не набор вкладок.
  *
- * Раньше все три способа лежали секциями на самом экране, друг под другом, и
- * ссылка на репозиторий оказывалась в самом низу длинной страницы. Установка —
- * действие редкое, а занимала две трети места; список установленного, на
- * который смотрят каждый день, ютился сверху.
+ * Вкладки предполагают, что человек знает, каким способом ставит. На деле у
+ * него на руках **что-то одно** — ссылка, кусок JSON или скачанный архив, — и
+ * он ищет, куда это деть. Раскладывать за него по трём вкладкам значит просить
+ * сначала определить, что у него в руках.
  *
- * Способы разведены вкладками, а не секциями: это выбор одного из трёх, а не
- * последовательность шагов, и пролистывать мимо двух ненужных не надо.
+ * Поэтому поле одно и разбирает вставленное само: ссылка на репозиторий и
+ * конфигурация MCP различаются с первого символа. Архив — отдельной кнопкой:
+ * файл не вставляют, его выбирают.
  */
 function AddDialog({
   client,
   installed,
-  local,
   onClose,
 }: {
   client: AxonClient;
   installed: Set<string>;
-  /** Ядро на этой же машине. От этого зависит смысл локального пути. */
-  local: boolean;
   onClose: () => void;
 }) {
-  const [way, setWay] = useState<Way>('catalog');
+  const [text, setText] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  const [catalog, setCatalog] = useState<CatalogEntry[] | null>(null);
+  const [setup, setSetup] = useState<CatalogEntry | null>(null);
 
-  const run: RunFn = async (label, action) => {
+  useEffect(() => {
+    void client
+      .call('plugin.catalog', {})
+      // Отличать «каталог пуст» от «каталог не приехал» обязательно: иначе
+      // старое ядро, не знающее про плагины, выглядит как ядро без каталога,
+      // и человек ищет проблему не там.
+      .then((res) => setCatalog(res.entries))
+      .catch(() => setCatalog(null));
+  }, []);
+
+  const run = async (label: string, action: () => Promise<unknown>): Promise<void> => {
     setBusy(label);
     setFailure(null);
     try {
@@ -185,145 +174,182 @@ function AddDialog({
     }
   };
 
+  const what = useMemo(() => recognise(text), [text]);
+
+  const installPasted = (): void => {
+    if (what.kind === 'git') {
+      void run('paste', () =>
+        client.call('plugin.install', { source: { type: 'git', url: what.url } }),
+      );
+      return;
+    }
+    if (what.kind === 'mcp') {
+      // Один конфиг может описывать несколько серверов — ставим каждый
+      // отдельным плагином, чтобы их можно было включать по одному.
+      void run('paste', async () => {
+        for (const server of what.servers) {
+          await client.call('plugin.install', {
+            source: { type: 'mcp', name: server.name, transport: server.transport },
+          });
+        }
+      });
+    }
+  };
+
+  const upload = async (file: File): Promise<void> => {
+    await run('archive', async () => {
+      const blob = await client.uploadBlob({
+        data: new Uint8Array(await file.arrayBuffer()),
+        mime: 'application/zip',
+        name: file.name,
+      });
+      await client.call('plugin.install', {
+        source: { type: 'archive', blobId: blob.blobId, name: file.name },
+      });
+    });
+  };
+
+  const available = (catalog ?? []).filter((entry) => !installed.has(entry.id));
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-6"
       onClick={onClose}
     >
       <div
-        className="card w-full max-w-2xl max-h-[80vh] flex flex-col rise"
+        className="card w-full max-w-2xl max-h-[85vh] flex flex-col rise"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2.5 px-5 pt-5 pb-3">
           <i className="bi bi-plus-circle text-accent" />
-          <h3 className="text-[15px] font-semibold flex-1">Добавить плагин</h3>
+          <h3 className="text-[15px] font-semibold flex-1">Установка плагина</h3>
           <button type="button" onClick={onClose} className="text-text-dim hover:text-text">
             <i className="bi bi-x-lg text-[12px]" />
           </button>
         </div>
 
-        <div className="px-5">
-          <div className="seg w-full">
-            {WAYS.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                aria-pressed={way === item.id}
-                onClick={() => setWay(item.id)}
-                className="flex-1 flex items-center justify-center gap-1.5"
-              >
-                <i className={clsx('bi', item.icon, 'text-[11px]')} />
-                {item.title}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex-1 min-h-0 overflow-y-auto scrollbar px-5 py-4">
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar px-5 py-4 space-y-5">
           {failure && <Failure text={failure} onClose={() => setFailure(null)} />}
 
-          {way === 'catalog' && (
-            <CatalogWay client={client} installed={installed} busy={busy} onRun={run} />
-          )}
-          {way === 'mcp' && <McpWay client={client} busy={busy} onRun={run} />}
-          {way === 'git' && <GitWay client={client} busy={busy} onRun={run} />}
-          {way === 'folder' && <FolderWay client={client} busy={busy} onRun={run} local={local} />}
-        </div>
-      </div>
-    </div>
-  );
-}
+          <section>
+            <h4 className="text-[13px] font-semibold">Вставьте ссылку или конфигурацию</h4>
+            <p className="mt-1 mb-2.5 text-[11px] text-text-dim leading-relaxed">
+              Ссылку на репозиторий плагина или конфигурацию MCP-сервера в том виде, в каком она
+              написана в его README — для Claude Desktop, VS Code, любую. Что именно вставлено,
+              разберётся само.
+            </p>
 
-function CatalogWay({
-  client,
-  installed,
-  busy,
-  onRun,
-}: {
-  client: AxonClient;
-  installed: Set<string>;
-  busy: string | null;
-  onRun: RunFn;
-}) {
-  const [catalog, setCatalog] = useState<CatalogEntry[] | null>(null);
-  const [setup, setSetup] = useState<CatalogEntry | null>(null);
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              rows={text.includes('\n') ? 7 : 2}
+              spellCheck={false}
+              placeholder={PLACEHOLDER}
+              className="w-full px-3 py-2 rounded-lg bg-bg border border-border text-[11px] font-mono leading-relaxed outline-none focus:border-accent transition-colors resize-y scrollbar"
+            />
 
-  useEffect(() => {
-    void client
-      .call('plugin.catalog', {})
-      .then((res) => setCatalog(res.entries))
-      // Отличать «каталог пуст» от «каталог не приехал» обязательно: иначе
-      // старое ядро, не знающее про плагины, выглядит как ядро без каталога,
-      // и человек ищет проблему не там.
-      .catch(() => setCatalog(null));
-  }, []);
+            <div className="mt-2 flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                disabled={what.kind === 'nothing' || busy !== null}
+                onClick={installPasted}
+                className="h-9 px-4 rounded-lg bg-accent text-accent-fg text-[12px] font-medium disabled:opacity-40 hover:opacity-90 transition-opacity"
+              >
+                {busy === 'paste' ? 'Ставлю…' : 'Поставить'}
+              </button>
 
-  const available = (catalog ?? []).filter((entry) => !installed.has(entry.id));
+              <label className="h-9 px-4 rounded-lg border border-border text-[12px] text-text-muted hover:border-border-strong hover:text-text transition-colors flex items-center gap-1.5 cursor-pointer">
+                <i className="bi bi-file-earmark-zip text-[12px]" />
+                {busy === 'archive' ? 'Загружаю…' : 'Загрузить архив…'}
+                <input
+                  type="file"
+                  accept=".zip,.gz,.tgz"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    // Сбрасываем значение: иначе повторный выбор того же файла
+                    // не вызовет события, и кнопка будет выглядеть сломанной.
+                    e.target.value = '';
+                    if (file) void upload(file);
+                  }}
+                />
+              </label>
 
-  if (catalog === null) {
-    return (
-      <p className="text-[12px] text-warning">
-        Ядро не отдало каталог — скорее всего, оно старее приложения. Обновите ядро.
-      </p>
-    );
-  }
+              <span className="text-[11px] text-text-dim">{hint(what)}</span>
+            </div>
+          </section>
 
-  if (available.length === 0) {
-    return <p className="text-[12px] text-text-dim">Всё из каталога уже установлено.</p>;
-  }
+          <section>
+            <h4 className="text-[13px] font-semibold">Каталог</h4>
+            <p className="mt-1 mb-2.5 text-[11px] text-text-dim leading-relaxed">
+              Проверенные плагины. Список едет вместе с ядром, поэтому работает и без интернета —
+              но это закладки, а не граница возможного.
+            </p>
 
-  return (
-    <>
-      <p className="mb-3 text-[11px] text-text-dim leading-relaxed">
-        Проверенные плагины. Список едет вместе с ядром, поэтому работает и без интернета — но это
-        закладки, а не граница возможного: соседние вкладки ставят что угодно.
-      </p>
-
-      <div className="flex flex-col gap-1.5">
-        {available.map((entry) => (
-          <div key={entry.id} className="card flex items-start gap-3 px-3 py-2.5">
-            <i className="bi bi-box-seam text-accent mt-0.5" />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[13px] font-medium">{entry.name}</span>
-                <KindBadge mcp={entry.install.type === 'mcp'} />
-                {entry.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="text-[10px] px-1.5 py-px rounded bg-surface-high text-text-dim"
-                  >
-                    {tag}
-                  </span>
+            {catalog === null ? (
+              <p className="text-[12px] text-warning">
+                Ядро не отдало каталог — скорее всего, оно старее приложения.
+              </p>
+            ) : available.length === 0 ? (
+              <p className="text-[12px] text-text-dim">Всё из каталога уже установлено.</p>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                {available.map((entry) => (
+                  <div key={entry.id} className="card flex items-start gap-3 px-3 py-2.5">
+                    <i className="bi bi-box-seam text-accent mt-0.5" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[13px] font-medium">{entry.name}</span>
+                        <KindBadge mcp={entry.install.type === 'mcp'} />
+                        {entry.tags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="text-[10px] px-1.5 py-px rounded bg-surface-high text-text-dim"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                      <p className="mt-1 text-[12px] leading-relaxed text-text-muted">
+                        {entry.description}
+                      </p>
+                      {entry.permissions.length > 0 && (
+                        <p className="mt-1.5 text-[11px] text-text-dim">
+                          <i className="bi bi-shield-lock mr-1" />
+                          Запрашивает: {entry.permissions.map((p) => PERMISSION[p] ?? p).join(', ')}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      disabled={busy !== null}
+                      onClick={() => {
+                        // Плагин, которому нужен токен, нельзя ставить молча:
+                        // без него он всё равно поднимется в «нужна настройка».
+                        if (entry.setup.length > 0) setSetup(entry);
+                        else
+                          void run(entry.id, () =>
+                            client.call('plugin.install', {
+                              source: { type: 'catalog', id: entry.id, values: {} },
+                            }),
+                          );
+                      }}
+                      className="shrink-0 h-8 px-3 rounded-lg bg-accent text-accent-fg text-[12px] font-medium disabled:opacity-50 hover:opacity-90 transition-opacity"
+                    >
+                      {busy === entry.id ? '…' : 'Поставить'}
+                    </button>
+                  </div>
                 ))}
               </div>
-              <p className="mt-1 text-[12px] leading-relaxed text-text-muted">{entry.description}</p>
-              {entry.permissions.length > 0 && (
-                <p className="mt-1.5 text-[11px] text-text-dim">
-                  <i className="bi bi-shield-lock mr-1" />
-                  Запрашивает: {entry.permissions.map((p) => PERMISSION[p] ?? p).join(', ')}
-                </p>
-              )}
-            </div>
-            <button
-              type="button"
-              disabled={busy !== null}
-              onClick={() => {
-                // Плагин, которому нужен токен, нельзя ставить молча: без него
-                // он всё равно поднимется в состояние «нужна настройка».
-                if (entry.setup.length > 0) setSetup(entry);
-                else
-                  void onRun(entry.id, () =>
-                    client.call('plugin.install', {
-                      source: { type: 'catalog', id: entry.id, values: {} },
-                    }),
-                  );
-              }}
-              className="shrink-0 h-8 px-3 rounded-lg bg-accent text-accent-fg text-[12px] font-medium disabled:opacity-50 hover:opacity-90 transition-opacity"
-            >
-              {busy === entry.id ? '…' : 'Поставить'}
-            </button>
-          </div>
-        ))}
+            )}
+          </section>
+
+          <p className="text-[11px] text-text-dim leading-relaxed">
+            <i className="bi bi-exclamation-triangle text-warning mr-1" />
+            Код чужого плагина выполняется на машине ядра с вашими правами. Отдельный процесс
+            защищает от падений, но не от намерений — ставьте только то, чему доверяете.
+          </p>
+        </div>
       </div>
 
       {setup && (
@@ -333,7 +359,7 @@ function CatalogWay({
           onSubmit={(values) => {
             const entry = setup;
             setSetup(null);
-            void onRun(entry.id, () =>
+            void run(entry.id, () =>
               client.call('plugin.install', {
                 source: { type: 'catalog', id: entry.id, values },
               }),
@@ -341,202 +367,55 @@ function CatalogWay({
           }}
         />
       )}
-    </>
+    </div>
   );
 }
 
-function McpWay({ client, busy, onRun }: { client: AxonClient; busy: string | null; onRun: RunFn }) {
-  const [json, setJson] = useState('');
+const PLACEHOLDER = `https://github.com/автор/axon-plugin-…
 
-  // Разбираем по ходу набора: человек видит, что получилось, до того как
-  // нажмёт «Поставить», а не после отказа.
-  const parsed = useMemo(() => {
-    if (!json.trim()) return { servers: null, problem: null };
-    try {
-      return { servers: parseMcpConfig(json), problem: null };
-    } catch (error) {
-      return { servers: null, problem: (error as Error).message };
-    }
-  }, [json]);
+или
 
-  const servers = parsed.servers;
-  const preview = servers?.map((server) => `${server.name} (${server.transport.type})`).join(', ');
+{ "mcpServers": { "мой-сервер": { "command": "npx", "args": ["-y", "@автор/mcp-server"] } } }`;
 
-  return (
-    <>
-      <p className="mb-3 text-[11px] text-text-dim leading-relaxed">
-        Вставьте конфигурацию MCP-сервера в том виде, в каком она написана в его README, — для
-        Claude Desktop, VS Code или любую другую. Своего формата у Axon нет намеренно: переписывать
-        готовый кусок JSON в чужие поля никто не станет.
-      </p>
-
-      <textarea
-        value={json}
-        onChange={(e) => setJson(e.target.value)}
-        rows={8}
-        spellCheck={false}
-        placeholder={MCP_EXAMPLE}
-        className="w-full px-3 py-2 rounded-lg bg-bg border border-border text-[11px] font-mono leading-relaxed outline-none focus:border-accent transition-colors resize-y scrollbar"
-      />
-
-      {preview && (
-        <p className="mt-1.5 text-[11px] text-success">
-          <i className="bi bi-check2 mr-1" />
-          Разобрано: {preview}
-        </p>
-      )}
-      {parsed.problem && <p className="mt-1.5 text-[11px] text-warning">{parsed.problem}</p>}
-
-      <button
-        type="button"
-        disabled={!servers || busy !== null}
-        onClick={() => {
-          if (!servers) return;
-          // Один конфиг может описывать несколько серверов — ставим каждый
-          // отдельным плагином, чтобы их можно было включать по одному.
-          void onRun('mcp', async () => {
-            for (const server of servers) {
-              await client.call('plugin.install', {
-                source: { type: 'mcp', name: server.name, transport: server.transport },
-              });
-            }
-          });
-        }}
-        className="mt-3 h-9 px-4 rounded-lg bg-accent text-accent-fg text-[12px] font-medium disabled:opacity-40 hover:opacity-90 transition-opacity"
-      >
-        {busy === 'mcp' ? 'Ставлю…' : 'Поставить'}
-      </button>
-    </>
-  );
-}
-
-function GitWay({ client, busy, onRun }: { client: AxonClient; busy: string | null; onRun: RunFn }) {
-  const [url, setUrl] = useState('');
-
-  const install = (): void => {
-    const trimmed = url.trim();
-    if (!trimmed) return;
-    void onRun('git', () =>
-      client.call('plugin.install', { source: { type: 'git', url: trimmed } }),
-    );
-  };
-
-  return (
-    <>
-      <p className="mb-3 text-[11px] text-text-dim leading-relaxed">
-        Ядро склонирует репозиторий к себе и запустит плагин отдельным процессом.
-      </p>
-
-      <input
-        value={url}
-        onChange={(e) => setUrl(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && install()}
-        placeholder="https://github.com/автор/axon-plugin-…"
-        className="w-full h-9 px-3 rounded-lg bg-bg border border-border text-[12px] font-mono outline-none focus:border-accent transition-colors"
-      />
-
-      <div className="mt-3 flex items-start gap-2 px-3 py-2.5 rounded-lg bg-warning/10 border border-warning/30">
-        <i className="bi bi-exclamation-triangle text-warning text-[12px] mt-0.5" />
-        <p className="text-[11px] text-text-muted leading-relaxed">
-          Код чужого плагина выполняется на машине ядра с вашими правами. Отдельный процесс
-          защищает от падений, но не от намерений — ставьте только то, чему доверяете.
-        </p>
-      </div>
-
-      <button
-        type="button"
-        disabled={!url.trim() || busy !== null}
-        onClick={install}
-        className="mt-3 h-9 px-4 rounded-lg bg-accent text-accent-fg text-[12px] font-medium disabled:opacity-40 hover:opacity-90 transition-opacity"
-      >
-        {busy === 'git' ? 'Клонирую…' : 'Поставить'}
-      </button>
-    </>
-  );
-}
+type Recognised =
+  | { kind: 'nothing' }
+  | { kind: 'git'; url: string }
+  | { kind: 'mcp'; servers: ReturnType<typeof parseMcpConfig> }
+  | { kind: 'unclear'; why: string };
 
 /**
- * Установка из папки на диске.
+ * Понять, что вставили.
  *
- * Ради авторов плагинов. До этого свой плагин можно было поставить только
- * через CLI или запушив в репозиторий — то есть каждая правка означала коммит,
- * пуш и переустановку. Папка подключается как есть: правишь файлы, перезапускаешь
- * плагин, видишь результат.
- *
- * Папка не копируется, а подключается по месту. Поэтому обновление плагина её
- * не перезаписывает — и поэтому же плагин перестанет работать, если папку
- * убрать или переименовать.
+ * Ссылка и конфигурация различаются первым же символом, так что гадать не
+ * приходится. Разбираем сразу при наборе: человек видит, что получилось, до
+ * того как нажмёт «Поставить», а не после отказа.
  */
-function FolderWay({
-  client,
-  busy,
-  onRun,
-  local,
-}: {
-  client: AxonClient;
-  busy: string | null;
-  onRun: RunFn;
-  local: boolean;
-}) {
-  const [dir, setDir] = useState('');
+function recognise(raw: string): Recognised {
+  const text = raw.trim();
+  if (!text) return { kind: 'nothing' };
 
-  const install = (): void => {
-    const trimmed = dir.trim();
-    if (!trimmed) return;
-    void onRun('folder', () =>
-      client.call('plugin.install', { source: { type: 'link', path: trimmed } }),
-    );
-  };
+  if (/^(https?:\/\/|git@)/i.test(text) && !text.includes('\n')) {
+    return { kind: 'git', url: text };
+  }
 
-  return (
-    <>
-      <p className="mb-3 text-[11px] text-text-dim leading-relaxed">
-        Папка с файлом <code className="font-mono">axon.plugin.json</code>. Она подключается по
-        месту, а не копируется: правите файлы — перезапускаете плагин — видите результат. Так
-        удобнее всего писать свой.
-      </p>
+  if (text.startsWith('{')) {
+    try {
+      return { kind: 'mcp', servers: parseMcpConfig(text) };
+    } catch (error) {
+      return { kind: 'unclear', why: (error as Error).message };
+    }
+  }
 
-      <div className="flex gap-2">
-        <input
-          value={dir}
-          onChange={(e) => setDir(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && install()}
-          placeholder={local ? 'C:\\проекты\\мой-плагин' : '/путь/на/машине/с/ядром'}
-          className="flex-1 h-9 px-3 rounded-lg bg-bg border border-border text-[12px] font-mono outline-none focus:border-accent transition-colors"
-        />
-        {local && window.axon?.pickFolder && (
-          <button
-            type="button"
-            onClick={() => void window.axon!.pickFolder!().then((picked) => picked && setDir(picked))}
-            className="h-9 px-3 rounded-lg border border-border text-[12px] text-text-muted hover:border-border-strong hover:text-text transition-colors"
-          >
-            Выбрать…
-          </button>
-        )}
-      </div>
+  return { kind: 'unclear', why: 'Похоже, это ни ссылка, ни конфигурация MCP' };
+}
 
-      {!local && (
-        <p className="mt-2 text-[11px] text-warning leading-relaxed">
-          Ядро работает на другой машине — путь должен существовать <b>там</b>, а не здесь.
-          Выбрать папку кнопкой поэтому нельзя: у вашего компьютера с тем диском ничего общего.
-        </p>
-      )}
-
-      <button
-        type="button"
-        disabled={!dir.trim() || busy !== null}
-        onClick={install}
-        className="mt-3 h-9 px-4 rounded-lg bg-accent text-accent-fg text-[12px] font-medium disabled:opacity-40 hover:opacity-90 transition-opacity"
-      >
-        {busy === 'folder' ? 'Подключаю…' : 'Подключить'}
-      </button>
-
-      <p className="mt-3 text-[11px] text-text-dim leading-relaxed">
-        С чего начать — <code className="font-mono">examples/feeds-plugin</code> в репозитории
-        Axon: рабочий плагин без зависимостей, где задействовано всё сразу.
-      </p>
-    </>
-  );
+function hint(what: Recognised): string {
+  if (what.kind === 'git') return 'Ссылка на репозиторий';
+  if (what.kind === 'mcp') {
+    return `MCP: ${what.servers.map((server) => server.name).join(', ')}`;
+  }
+  if (what.kind === 'unclear') return what.why;
+  return '';
 }
 
 function PluginCard({

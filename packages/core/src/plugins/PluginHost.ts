@@ -15,7 +15,7 @@ import type { PluginRow } from '../storage/repos.js';
 import type { ToolRegistry } from '../tools/ToolRegistry.js';
 import { DISABLED_SKILLS_SETTING, type SkillRegistry } from '../skills/SkillRegistry.js';
 import { CATALOG } from './catalog.js';
-import { install } from './install.js';
+import { install, installFromArchive } from './install.js';
 import { LoadedPlugin, settingKey } from './LoadedPlugin.js';
 import { readManifest } from './manifest.js';
 import type { LogLine } from './PluginProcess.js';
@@ -139,12 +139,37 @@ export class PluginHost {
     }
   }
 
+  /**
+   * Достать загруженный архив из блоб-хранилища.
+   *
+   * Блоб отдаётся в base64 — так устроено чтение вложений, и заводить второй
+   * путь ради плагинов значило бы иметь два способа прочитать одно и то же.
+   */
+  private async archiveBytes(blobId: string): Promise<Buffer> {
+    const blob = await this.options.blobs.read(blobId);
+    if (!blob) throw new Error('Загруженный архив не найден — попробуйте ещё раз');
+    return Buffer.from(blob.base64, 'base64');
+  }
+
   // ─── Изменения ────────────────────────────────────────────────────────────
 
   async install(source: PluginSource): Promise<PluginInfo> {
     fs.mkdirSync(this.pluginsDir, { recursive: true });
 
-    const result = await install(source, this.pluginsDir, (id) => this.loaded.has(id));
+    /**
+     * Архив приходит блобом и разворачивается здесь.
+     *
+     * `install` про блоб-хранилище не знает и знать не должен: его дело —
+     * положить папку и прочитать манифест, откуда бы байты ни взялись.
+     */
+    const result =
+      source.type === 'archive'
+        ? installFromArchive(
+            await this.archiveBytes(String(source.blobId)),
+            this.pluginsDir,
+            (id) => this.loaded.has(id),
+          )
+        : await install(source, this.pluginsDir, (id) => this.loaded.has(id));
     const now = new Date().toISOString();
 
     // Настройки записываем до старта: плагин должен увидеть их в activate, а

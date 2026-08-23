@@ -385,13 +385,7 @@ export function App() {
         return <ToolsPanel tools={tools} plugins={plugins} client={client} />;
 
       case 'plugins':
-        return (
-          <PluginsPanel
-            plugins={plugins}
-            client={client}
-            local={connection?.mode !== 'remote'}
-          />
-        );
+        return <PluginsPanel plugins={plugins} client={client} />;
 
       case 'routines':
         return (

@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { unpack } from './archive.js';
 import { promisify } from 'node:util';
 import type {
   CatalogEntry,
@@ -53,6 +54,48 @@ export async function install(
       return installMcp(source, pluginsDir, taken);
     case 'link':
       return linkFolder(source.path, taken);
+    default:
+      // Архив разворачивает PluginHost: ему нужны байты из блоб-хранилища,
+      // о котором эта функция не знает и знать не должна.
+      throw new InstallError(`Такой источник здесь не ставится: ${source.type}`);
+  }
+}
+
+/**
+ * Поставить плагин из распакованного архива.
+ *
+ * Отдельно от `install`, потому что сюда приходят уже байты: достать их из
+ * блоб-хранилища может только тот, у кого оно есть, а `install` про хранилище
+ * не знает и знать не должен.
+ */
+export function installFromArchive(
+  archive: Buffer,
+  pluginsDir: string,
+  taken: (id: string) => boolean,
+): InstallResult {
+  // Разворачиваем во временное место: пока не прочитан манифест, неизвестно
+  // даже, как плагин зовут, а значит и куда его класть.
+  const staging = path.join(pluginsDir, `.распаковка-${Date.now()}`);
+
+  try {
+    const root = unpack(archive, staging);
+    const manifest = readManifest(root);
+
+    if (taken(manifest.id)) throw new InstallError(`Плагин ${manifest.id} уже установлен`);
+
+    const target = path.join(pluginsDir, manifest.id);
+    fs.rmSync(target, { recursive: true, force: true });
+    fs.renameSync(root, target);
+
+    return {
+      dir: target,
+      manifest,
+      origin: { type: 'archive' as const, ref: manifest.id },
+      values: {},
+      secretKeys: [],
+    };
+  } finally {
+    fs.rmSync(staging, { recursive: true, force: true });
   }
 }
 
