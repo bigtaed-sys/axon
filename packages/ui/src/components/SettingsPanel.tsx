@@ -1427,8 +1427,8 @@ function AccessPage({
               disabled={busy}
               onToggle={() => {
                 setBusy(true);
-                void window
-                  .axon!.setExposed(!connection?.exposed)
+                void host()
+                  .local!.use({ expose: !connection?.exposed })
                   .then(() => onReconnect())
                   .finally(() => setBusy(false));
               }}
@@ -1544,12 +1544,12 @@ function AboutPage({
     <>
       <Section title="Axon" icon="bi-info-circle-fill">
         <dl className="text-[12px] space-y-2">
-          <Row label="Приложение" value={formatVersion(__APP_VERSION__)} />
-          <Row label="Собрано" value={builtAt(__APP_BUILT_AT__)} />
+          <Row label="Приложение" value={formatVersion(host().app.version)} />
+          <Row label="Собрано" value={builtAt(host().app.builtAt)} />
           <Row
             label="Ядро"
             value={core ? formatVersion(core.version) : '—'}
-            tone={core && compareVersions(core.version, __APP_VERSION__) < 0 ? 'warning' : undefined}
+            tone={core && compareVersions(core.version, host().app.version) < 0 ? 'warning' : undefined}
           />
           <Row
             label="Режим ядра"

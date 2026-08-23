@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
 import type { ConnectionStatus } from '@axon/client-sdk';
 import { THEMES, type ThemeId } from '../theme.js';
+import { host } from '../host.js';
 
 const STATUS: Record<ConnectionStatus, { label: string; icon: string; tone: string }> = {
   offline: { label: 'Нет связи с ядром', icon: 'bi-plug', tone: 'text-danger' },
@@ -36,7 +37,7 @@ export function TopBar({
             здесь однажды разошлась бы с настоящей — и первый же отчёт об
             ошибке пришёл бы с неверным номером.
           */}
-          <span className="text-[11px] text-text-dim">v{__APP_VERSION__}</span>
+          <span className="text-[11px] text-text-dim">v{host().app.version}</span>
         </div>
         <span className="w-px h-4 bg-border mx-1" />
         <div className={clsx('flex items-center gap-1.5 text-[12px]', state.tone)}>

@@ -50,7 +50,20 @@ export interface LocalCoreHost {
   setAutostart(enable: boolean): Promise<AutostartState>;
 }
 
+/**
+ * Само приложение: что показывать в «О программе» и с чем сверять версию ядра.
+ *
+ * Приходит от платформы, а не подставляется при сборке интерфейса: у десктопа
+ * и телефона версии свои, а интерфейс один.
+ */
+export interface AppInfo {
+  version: string;
+  /** Когда собрано, ISO-8601. */
+  builtAt: string;
+}
+
 export interface Host {
+  app: AppInfo;
   /** Куда подключаться сейчас и почему не вышло, если не вышло. */
   connection(): Promise<{ connection: Connection | null; error: string | null }>;
   /** Обменять код на токен и запомнить чужое ядро. */

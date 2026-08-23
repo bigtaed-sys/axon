@@ -1,4 +1,4 @@
-import { setHost, type Connection, type CoreProbe, type AutostartState } from './host.js';
+import { setHost, type Connection, type CoreProbe, type AutostartState } from '@axon/ui';
 
 /**
  * Хозяин окна в Electron — тонкая обёртка над мостом из preload.
@@ -35,6 +35,7 @@ export function installElectronHost(): boolean {
   if (!bridge) return false;
 
   setHost({
+    app: { version: __APP_VERSION__, builtAt: __APP_BUILT_AT__ },
     connection: () => bridge.connection(),
     connectRemote: (input) => bridge.connectRemote(input),
     probe: (url) => bridge.probe(url),

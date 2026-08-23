@@ -25,6 +25,7 @@ import { TopBar } from './components/TopBar.js';
 import { useMotion } from './motion.js';
 import { useTheme } from './theme.js';
 import { useAxon } from './useAxon.js';
+import { host } from './host.js';
 
 /** Заголовок чата до первого сообщения. */
 const PLACEHOLDER_TITLE = 'Новый чат';
@@ -229,7 +230,7 @@ export function App() {
    * логики протокол не меняет, поэтому по ревизии всё выглядит согласованным.
    */
   const coreVersion = client?.coreInfo?.version ?? '';
-  const coreBehind = coreVersion ? compareVersions(coreVersion, __APP_VERSION__) < 0 : false;
+  const coreBehind = coreVersion ? compareVersions(coreVersion, host().app.version) < 0 : false;
   const coreStale = (coreOutdated || coreBehind) && connection?.mode === 'embedded';
 
   const createChat = async (): Promise<void> => {
@@ -438,7 +439,7 @@ export function App() {
           <i className="bi bi-arrow-clockwise" />
           <span className="flex-1">
             {coreBehind
-              ? `Ядро ${formatVersion(coreVersion)} старее приложения ${formatVersion(__APP_VERSION__)} — оно работает на старом коде.`
+              ? `Ядро ${formatVersion(coreVersion)} старее приложения ${formatVersion(host().app.version)} — оно работает на старом коде.`
               : 'Ядро старее приложения — часть возможностей ему пока неизвестна.'}
           </span>
           <button
