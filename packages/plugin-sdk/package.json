@@ -1,9 +1,13 @@
 {
   "name": "@axon-assistant/plugin-sdk",
   "version": "0.1.0",
+  "comment:version": "Заглушка. Настоящий номер проставляется из git-тега при публикации: см. scripts/release-npm.mjs. Версия, которую правят руками, рано или поздно расходится с тем, что опубликовано.",
   "description": "Типы для написания плагинов Axon",
   "keywords": ["axon", "plugin", "ai", "agent"],
   "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/bigtaed-sys/axon.git", "directory": "packages/plugin-sdk" },
+  "homepage": "https://github.com/bigtaed-sys/axon#readme",
+  "bugs": "https://github.com/bigtaed-sys/axon/issues",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -19,6 +23,7 @@
   },
   "scripts": {
     "build": "tsc --build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
   }
 }

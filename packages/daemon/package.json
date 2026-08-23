@@ -1,6 +1,7 @@
 {
   "name": "@axon-assistant/core",
   "version": "0.1.0",
+  "comment:version": "Заглушка. Настоящий номер проставляется из git-тега при публикации: см. scripts/release-npm.mjs. Версия, которую правят руками, рано или поздно расходится с тем, что опубликовано.",
   "description": "Ядро Axon: персональный AI-агент, который живёт на вашей машине",
   "keywords": [
     "ai",
@@ -10,6 +11,9 @@
     "llm"
   ],
   "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/bigtaed-sys/axon.git", "directory": "packages/daemon" },
+  "homepage": "https://github.com/bigtaed-sys/axon#readme",
+  "bugs": "https://github.com/bigtaed-sys/axon/issues",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
