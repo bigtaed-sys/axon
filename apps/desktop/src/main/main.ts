@@ -72,6 +72,14 @@ function installShortcuts(target: BrowserWindow): void {
     if (!input.control && !input.meta) return;
     if (input.alt) return;
 
+    /**
+     * Зажатая клавиша повторяется системой, и каждое повторение — это ещё
+     * одно нажатие. Для набора букв так и надо, для вставки — нет: палец,
+     * задержавшийся на Ctrl+V лишнюю долю секунды, вставляет ключ дважды,
+     * трижды, сколько успеет. Заметить это в поле с точками невозможно.
+     */
+    if (input.isAutoRepeat) return event.preventDefault();
+
     const contents = target.webContents;
     switch (input.key.toLowerCase()) {
       case 'v':
