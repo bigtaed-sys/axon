@@ -71,10 +71,35 @@ export class SecretStore {
       | SecretRow
       | undefined;
     if (!row) return null;
+    return this.decrypt(row);
+  }
 
+  /**
+   * Расшифровать строку. Бросает, если значение не сходится с ключом.
+   *
+   * GCM проверяет подпись, поэтому чужой ключ шифрования — это не мусор на
+   * выходе, а честный отказ. Ловить его здесь нельзя: молча вернуть `null`
+   * значит превратить «ключ не читается» в «ключа нет», а лечатся они
+   * по-разному.
+   */
+  private decrypt(row: SecretRow): string {
     const decipher = crypto.createDecipheriv(ALGORITHM, this.masterKey(), row.iv);
     decipher.setAuthTag(row.tag);
     return Buffer.concat([decipher.update(row.ciphertext), decipher.final()]).toString('utf8');
+  }
+
+  /** Читается ли значение здешним ключом шифрования. */
+  private readable(key: string): boolean {
+    const row = this.db.prepare(`SELECT * FROM secrets WHERE key = ?`).get(key) as
+      | SecretRow
+      | undefined;
+    if (!row) return false;
+    try {
+      this.decrypt(row);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   delete(key: string): void {
@@ -103,6 +128,11 @@ export class SecretStore {
         set: true,
         ...(row.hint ? { hint: row.hint } : {}),
         updatedAt: row.updated_at,
+        // Наличие строки в базе — ещё не рабочий секрет: база могла приехать
+        // с другой машины, а ключ шифрования остаться там. «Ключ на месте» в
+        // таком случае врало, и человек искал причину в чём угодно, кроме
+        // переноса.
+        ...(this.readable(key) ? {} : { unreadable: true }),
       };
     });
   }

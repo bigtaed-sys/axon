@@ -181,6 +181,27 @@ describe('секреты', () => {
     expect(JSON.stringify(status)).not.toContain('очень-секретный');
   });
 
+  it('база без своего ключа шифрования — это «не читается», а не «задан»', () => {
+    // Ровно то, что случается при переносе: `axon backup` не кладёт secret.key
+    // в архив без спроса, база приезжает на новую машину, а ключ остаётся на
+    // старой. Раньше интерфейс показывал «ключ на месте», и человек искал
+    // причину отказов в чём угодно, кроме переноса.
+    const db = openDatabase({ databasePath: ':memory:' });
+    const keyPath = path.join(tmpDir, 'перенос.key');
+    const first = new Store({ db, secretKeyPath: keyPath });
+    first.updateSettings({ secrets: { 'provider.anthropic.apiKey': 'sk-ant-1234' } });
+
+    // Ключ шифрования подменяем — как если бы он был создан заново на новой
+    // машине. Сама база при этом та же.
+    fs.rmSync(keyPath);
+    const moved = new Store({ db, secretKeyPath: keyPath });
+
+    const [status] = moved.secrets.status(['provider.anthropic.apiKey']);
+    expect(status!.set).toBe(true);
+    expect(status!.unreadable).toBe(true);
+    expect(() => moved.secrets.reveal('provider.anthropic.apiKey')).toThrow();
+  });
+
   it('локально значение читается целиком', () => {
     store.updateSettings({ secrets: { 'provider.openai.apiKey': 'sk-abcdef' } });
     expect(store.secrets.reveal('provider.openai.apiKey')).toBe('sk-abcdef');

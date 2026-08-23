@@ -20,6 +20,14 @@ export const zSecretStatus = z.object({
   /** Последние символы значения. Присутствует, только если секрет задан. */
   hint: z.string().max(8).optional(),
   updatedAt: zTimestamp.optional(),
+  /**
+   * Значение лежит, но расшифровать его нечем.
+   *
+   * Так бывает после переноса: база приехала, а ключ шифрования рядом с ней —
+   * нет (`axon backup` не кладёт его в архив без спроса). Снаружи это выглядело
+   * как «ключ на месте», хотя ни один запрос с ним не проходит.
+   */
+  unreadable: z.boolean().optional(),
 });
 export type SecretStatus = z.infer<typeof zSecretStatus>;
 

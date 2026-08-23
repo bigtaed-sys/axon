@@ -60,9 +60,14 @@ function installEditing(target: BrowserWindow): void {
  * клавишей, и не зависит ни от меню, ни от рамки окна. Вызываем методы
  * `webContents`, а не подсовываем текст в поле: они работают с настоящим
  * буфером обмена и с любым полем, включая те, что ещё не написаны.
+ *
+ * `preventDefault` обязателен. Без него страница обрабатывает ту же клавишу
+ * сама, и вставка случается дважды — в поле оказывается ключ, склеенный сам с
+ * собой. Выглядит это не как двойная вставка, а как «ключ сохранён, но не
+ * работает»: ядро исправно хранит то, что ему дали.
  */
 function installShortcuts(target: BrowserWindow): void {
-  target.webContents.on('before-input-event', (_event, input) => {
+  target.webContents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown') return;
     if (!input.control && !input.meta) return;
     if (input.alt) return;
@@ -91,6 +96,8 @@ function installShortcuts(target: BrowserWindow): void {
       default:
         return;
     }
+
+    event.preventDefault();
   });
 }
 

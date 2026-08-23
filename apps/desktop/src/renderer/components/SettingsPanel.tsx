@@ -86,6 +86,7 @@ export function SettingsPanel({
   const [secrets, setSecrets] = useState<SecretStatus[]>([]);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [saved, setSaved] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
 
   const load = async (): Promise<void> => {
     const settings = await client.call('settings.get', {});
@@ -115,8 +116,21 @@ export function SettingsPanel({
     await load();
   };
 
+  /**
+   * Записать секрет.
+   *
+   * Отказ здесь обязан быть виден. Раньше исключение уходило в никуда — из
+   * обработчика нажатия его не ловил никто, — и человек видел поле, в котором
+   * остался его ключ, без единого слова о том, почему.
+   */
   const saveSecret = async (key: string, value: string): Promise<void> => {
-    await client.call('settings.set', { secrets: { [key]: value } });
+    setFailure(null);
+    try {
+      await client.call('settings.set', { secrets: { [key]: value } });
+    } catch (error) {
+      setFailure((error as Error).message);
+      throw error;
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 1600);
     await load();
@@ -177,11 +191,18 @@ export function SettingsPanel({
         </nav>
 
         <div className="p-3 border-t border-border min-h-[44px] flex items-center">
-          {saved && (
-            <span className="text-[11px] text-success flex items-center gap-1.5 animate-fade-in">
-              <i className="bi bi-check-circle-fill" />
-              сохранено
+          {failure ? (
+            <span className="text-[11px] text-danger leading-relaxed">
+              <i className="bi bi-exclamation-triangle mr-1" />
+              {failure}
             </span>
+          ) : (
+            saved && (
+              <span className="text-[11px] text-success flex items-center gap-1.5 animate-fade-in">
+                <i className="bi bi-check-circle-fill" />
+                сохранено
+              </span>
+            )
           )}
         </div>
       </aside>
@@ -396,9 +417,12 @@ function ProviderPage({ values, secrets, providers, save, saveSecret }: PageProp
             <button
               type="button"
               disabled={!keyDraft.trim() || !provider.secretKey}
-              onClick={async () => {
-                await saveSecret(provider.secretKey, keyDraft.trim());
-                setKeyDraft('');
+              onClick={() => {
+                void saveSecret(provider.secretKey, keyDraft.trim())
+                  .then(() => setKeyDraft(''))
+                  // Сообщение уже показано выше; здесь только не дать
+                  // необработанному отказу уйти в консоль.
+                  .catch(() => undefined);
               }}
               className="h-9 px-4 rounded-xl2 bg-accent text-accent-fg hover:bg-accent-hover text-[13px] font-medium transition-colors disabled:opacity-40"
             >
@@ -406,10 +430,17 @@ function ProviderPage({ values, secrets, providers, save, saveSecret }: PageProp
             </button>
           </div>
 
-          {secret?.set && (
+          {secret?.set && !secret.unreadable && (
             <p className="text-[11px] text-success flex items-center gap-1.5">
               <i className="bi bi-check-circle-fill" />
               ключ на месте
+            </p>
+          )}
+          {secret?.unreadable && (
+            <p className="text-[11px] text-danger leading-relaxed">
+              <i className="bi bi-exclamation-triangle mr-1" />
+              Ключ записан, но ядро не может его расшифровать — обычно так бывает, когда базу
+              перенесли без файла secret.key. Впишите ключ заново.
             </p>
           )}
           {provider.keyUrl && (
