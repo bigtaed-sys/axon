@@ -1,8 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, session, shell } from 'electron';
 import * as autostart from './autostart.js';
 import { ConnectionManager, type Connection } from './connection.js';
+import { policy } from './csp.js';
 
 const here = __dirname;
 
@@ -106,6 +107,61 @@ function installContextMenu(target: BrowserWindow): void {
   });
 }
 
+/** Типы файлов рендерера. Их немного и они известны: сборка Vite плюс шрифты. */
+const MIME: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.map': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.woff2': 'font/woff2',
+  '.woff': 'font/woff',
+  '.ttf': 'font/ttf',
+};
+
+/**
+ * Отдавать рендерер самим, чтобы поставить заголовок с политикой.
+ *
+ * Политика зависит от того, к какому ядру мы подключены, а зависящей от чего
+ * бы то ни было `<meta>` в статическом index.html быть не может: она читается
+ * при разборе документа. Заголовок же собирается в момент запроса — когда
+ * адрес ядра уже известен.
+ */
+function serveRenderer(): void {
+  protocol.handle('file', async (request) => {
+    const file = decodeURIComponent(new URL(request.url).pathname).replace(/^\/([A-Za-z]:)/, '$1');
+
+    let data: Buffer;
+    try {
+      data = await fs.promises.readFile(file);
+    } catch {
+      return new Response('нет такого файла', { status: 404 });
+    }
+
+    const type = MIME[path.extname(file).toLowerCase()] ?? 'application/octet-stream';
+    const headers: Record<string, string> = { 'content-type': type };
+    if (type.startsWith('text/html')) {
+      headers['Content-Security-Policy'] = policy(connections?.connection?.url ?? null);
+    }
+    return new Response(new Uint8Array(data), { headers });
+  });
+
+  // В разработке рендерер отдаёт Vite по http — там свой заголовок и свой
+  // путь; без этого политика в разработке отличалась бы от рабочей, и
+  // нарушения находились бы у пользователя, а не у нас.
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    if (details.resourceType !== 'mainFrame') return callback({});
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [policy(connections?.connection?.url ?? null)],
+      },
+    });
+  });
+}
+
 function createWindow(): void {
   window = new BrowserWindow({
     width: 1280,
@@ -205,6 +261,7 @@ app.whenReady().then(async () => {
   }
 
   try {
+    serveRenderer();
     createWindow();
   } catch (e) {
     // Без окна приложения нет вовсе — здесь только записать и выйти.
@@ -225,10 +282,27 @@ ipcMain.handle('axon:connection', () => ({
   error: startupError,
 }));
 
+/**
+ * Сменилось ядро — перезагрузить окно.
+ *
+ * Политика безопасности уезжает заголовком вместе с документом: другое ядро —
+ * другой источник, и разрешить его на лету нельзя. Перезагрузка не теряет
+ * ничего: состояние живёт в ядре, а рендерер поднимает его снапшотом.
+ *
+ * Небольшая задержка — чтобы ответ на вызов успел уйти в рендерер: иначе
+ * `connectRemote` вернётся в перезагружаемое окно и вызов повиснет.
+ */
+function reloadOnCoreChange(before: string | null): void {
+  if ((connections?.connection?.url ?? null) === before) return;
+  setTimeout(() => window?.reload(), 50);
+}
+
 /** Переключиться на своё ядро. */
 ipcMain.handle('axon:use-embedded', async (): Promise<Connection> => {
+  const before = connections?.connection?.url ?? null;
   const connection = await connections!.useEmbedded();
   startupError = null;
+  reloadOnCoreChange(before);
   return connection;
 });
 
@@ -243,8 +317,10 @@ ipcMain.handle('axon:set-exposed', async (_event, expose: boolean): Promise<Conn
 ipcMain.handle(
   'axon:connect-remote',
   async (_event, input: { url: string; code: string; name: string }): Promise<Connection> => {
+    const before = connections?.connection?.url ?? null;
     const connection = await connections!.connectRemote(input);
     startupError = null;
+    reloadOnCoreChange(before);
     return connection;
   },
 );
@@ -253,8 +329,10 @@ ipcMain.handle(
 ipcMain.handle('axon:probe', async (_event, url: string) => connections!.probe(url));
 
 ipcMain.handle('axon:forget-remote', async (): Promise<Connection> => {
+  const before = connections?.connection?.url ?? null;
   const connection = await connections!.forgetRemote();
   startupError = null;
+  reloadOnCoreChange(before);
   return connection;
 });
 

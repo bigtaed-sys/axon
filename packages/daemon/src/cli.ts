@@ -91,7 +91,17 @@ async function start(args: string[]): Promise<void> {
     return fail(`Ядро уже работает: ${running.url}, pid ${running.pid}.\n  Остановить: axon stop`);
   }
 
-  if (args.includes('--detach') || args.includes('-d')) return await detach(args);
+  /**
+   * Фоном по умолчанию.
+   *
+   * Ядро — служба, а не программа, которую держат открытым окном терминала:
+   * закрытая сессия SSH убивала его вместе с собой. `--foreground` оставлен
+   * для systemd и docker — там фоном процесс держит кто-то другой, и уход в
+   * фон только запутал бы его. Ядро внутри десктопа тоже не отвязывается:
+   * приложение запускает его само и само же следит за ним.
+   */
+  const foreground = args.includes('--foreground') || args.includes('-f') || mode === 'embedded';
+  if (!foreground) return await detach(args);
 
   const daemon = new Daemon({ host, port, mode });
 
@@ -167,11 +177,13 @@ async function detach(args: string[]): Promise<void> {
   const out = fs.openSync(file, 'a');
   const since = Date.now();
 
-  const child = spawn(
-    process.execPath,
-    [process.argv[1] ?? '', 'start', ...args.filter((arg) => arg !== '--detach' && arg !== '-d')],
-    { detached: true, stdio: ['ignore', out, out], windowsHide: true },
-  );
+  // `--foreground` ребёнку обязателен: без него он отвязал бы следующего, и
+  // так далее.
+  const child = spawn(process.execPath, [process.argv[1] ?? '', 'start', ...args, '--foreground'], {
+    detached: true,
+    stdio: ['ignore', out, out],
+    windowsHide: true,
+  });
   child.unref();
   fs.closeSync(out);
 
@@ -547,9 +559,9 @@ function running(dataDir: string): boolean {
 function usage(): void {
   console.log(`Axon — персональный AI-агент
 
-  axon start [--host 127.0.0.1] [--port 8787]   запустить ядро
+  axon start [--host 127.0.0.1] [--port 8787]   запустить ядро (фоном)
       --host 0.0.0.0                            открыть для других устройств
-      --detach, -d                              фоном: переживёт закрытый терминал
+      --foreground, -f                          не уходить в фон (systemd, docker)
   axon status                                   запущено ли ядро и где
   axon stop                                     остановить ядро
   axon secret list                              какие секреты заданы
