@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import clsx from 'clsx';
 import type { Message, Persona } from '@axon/protocol';
 import type { AxonClient, RunStream } from '@axon/client-sdk';
@@ -30,6 +30,15 @@ export function MessageList({
   onSuggest: (text: string) => void;
 }) {
   const container = useRef<HTMLDivElement>(null);
+
+  /**
+   * Последнее сообщение разговора.
+   *
+   * Переписать можно только его: ответ в середине держит на себе всё, что
+   * выросло дальше, и подменять его молча значило бы показать человеку
+   * разговор, которого не было.
+   */
+  const lastId = messages.at(-1)?.id;
 
   useEffect(() => {
     container.current?.scrollTo({ top: container.current.scrollHeight });
@@ -63,6 +72,7 @@ export function MessageList({
               results={results}
               showToolCalls={showToolCalls}
               client={client}
+              last={message.id === lastId}
             />
           ))}
           {stream && <StreamBubble stream={stream} />}
@@ -164,12 +174,16 @@ function Bubble({
   results,
   showToolCalls,
   client,
+  last,
 }: {
   message: Message;
   results: Map<string, Message>;
   showToolCalls: boolean;
   client: AxonClient;
+  last: boolean;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
   const isUser = message.role === 'user';
   const text = textOf(message);
   const calls = message.toolCalls ?? [];
@@ -203,10 +217,24 @@ function Bubble({
       <div className={clsx('flex flex-col gap-1.5 max-w-[78%] min-w-0', isUser && 'items-end')}>
         {blobs.length > 0 && <Attachments parts={blobs} client={client} />}
 
-        {text && (
+        {editing ? (
+          <Editing
+            value={draft}
+            onChange={setDraft}
+            onCancel={() => setEditing(false)}
+            onSend={() => {
+              setEditing(false);
+              void client.call('message.edit', {
+                id: message.id,
+                parts: [{ type: 'text', text: draft }],
+              });
+            }}
+          />
+        ) : (
+          text && (
           <div
             className={clsx(
-              'rounded-2xl px-4 py-2.5 text-[14px] leading-relaxed break-words',
+              'group rounded-2xl px-4 py-2.5 text-[14px] leading-relaxed break-words relative',
               isUser
                 ? 'bg-accent text-accent-fg rounded-br-md whitespace-pre-wrap'
                 : 'bg-surface-elev border border-border text-text rounded-bl-md',
@@ -222,13 +250,123 @@ function Bubble({
                   ` · ${cacheShare(message.usage.inputTokens, message.usage.cachedInputTokens)}% из кэша`}
               </div>
             )}
+
+            {/*
+              Кнопки появляются по наведению и только там, где действие имеет
+              смысл: свой вопрос можно переписать любой, ответ — переписать
+              заново только последний.
+            */}
+            <div
+              className={clsx(
+                'absolute -bottom-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity',
+                isUser ? 'right-2' : 'left-2',
+              )}
+            >
+              {isUser && (
+                <Tiny
+                  icon="bi-pencil"
+                  title="Изменить"
+                  onClick={() => {
+                    setDraft(text);
+                    setEditing(true);
+                  }}
+                />
+              )}
+              {!isUser && last && (
+                <Tiny
+                  icon="bi-arrow-clockwise"
+                  title="Ответить заново"
+                  onClick={() =>
+                    void client.call('message.regenerate', {
+                      conversationId: message.conversationId,
+                    })
+                  }
+                />
+              )}
+            </div>
           </div>
-        )}
+        ))}
 
         {showToolCalls &&
           calls.map((call) => (
             <ToolCallRow key={call.id} call={call} result={results.get(call.id) ?? null} />
           ))}
+      </div>
+    </div>
+  );
+}
+
+/** Кнопка у пузыря: заметна при наведении, не мешает чтению в покое. */
+function Tiny({
+  icon,
+  title,
+  onClick,
+}: {
+  icon: string;
+  title: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      className="w-6 h-6 rounded-md bg-surface border border-border text-text-dim hover:text-text hover:border-border-strong transition-colors flex items-center justify-center shadow-sm"
+    >
+      <i className={clsx('bi', icon, 'text-[11px]')} />
+    </button>
+  );
+}
+
+/**
+ * Правка вопроса на месте.
+ *
+ * Пузырь заменяется полем ввода, а не открывается окно: человек правит то же
+ * самое сообщение там же, где оно лежит, и видит его в ряду с остальными.
+ */
+function Editing({
+  value,
+  onChange,
+  onCancel,
+  onSend,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onCancel: () => void;
+  onSend: () => void;
+}) {
+  return (
+    <div className="w-full min-w-[280px] rounded-2xl border border-accent bg-surface p-2">
+      <textarea
+        autoFocus
+        rows={Math.min(8, value.split('\n').length + 1)}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') onCancel();
+          if (e.key === 'Enter' && !e.shiftKey && value.trim()) {
+            e.preventDefault();
+            onSend();
+          }
+        }}
+        className="w-full bg-transparent text-[14px] leading-relaxed outline-none resize-none scrollbar"
+      />
+      <div className="flex justify-end gap-1.5 mt-1">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="h-7 px-2.5 rounded-lg text-[12px] text-text-muted hover:text-text transition-colors"
+        >
+          Отмена
+        </button>
+        <button
+          type="button"
+          disabled={!value.trim()}
+          onClick={onSend}
+          className="h-7 px-3 rounded-lg bg-accent text-accent-fg text-[12px] font-medium disabled:opacity-40 hover:opacity-90 transition-opacity"
+        >
+          Переспросить
+        </button>
       </div>
     </div>
   );

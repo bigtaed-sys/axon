@@ -220,6 +220,35 @@ export class Store {
     });
   }
 
+  /**
+   * Убрать сообщение и всё, что было после него.
+   *
+   * Нужно для правки и перезапроса: изменённый вопрос делает недействительным
+   * не только ответ на него, но и всю ветку, выросшую дальше. Оставить её
+   * значило бы показать человеку разговор, которого не было, — с ответами на
+   * вопрос, который он только что переписал.
+   *
+   * Удаление мягкое, как и обычное: строки остаются в базе, из истории и
+   * поиска исчезают.
+   */
+  truncateFrom(conversationId: string, messageId: string): number {
+    const ord = this.messages.ordOf(messageId);
+    if (ord === null) return 0;
+
+    return this.transact(() => {
+      // Само сообщение и всё новее: `after` отдаёт строго новее, поэтому
+      // отсчитываем от предыдущей позиции.
+      const doomed = this.messages.after(conversationId, ord - 1);
+
+      for (const message of doomed) {
+        this.messages.softDelete(message.id);
+        this.search.remove(message.id);
+        this.record({ type: 'message.deleted', id: message.id, conversationId });
+      }
+      return doomed.length;
+    });
+  }
+
   deleteMessage(id: string, conversationId: string): void {
     this.transact(() => {
       this.messages.softDelete(id);

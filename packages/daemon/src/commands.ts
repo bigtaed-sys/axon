@@ -160,6 +160,58 @@ const handlers: Handlers = {
     return { runId, message };
   },
 
+  /**
+   * Переписать вопрос.
+   *
+   * Прежнее сообщение убирается вместе со всем, что за ним, и задаётся заново
+   * — новым сообщением с новым текстом. Можно было бы править существующее и
+   * перезапускать прогон от него, но тогда оркестратору понадобился бы режим
+   * «начать, ничего не добавляя», а выигрыш — сохранённый идентификатор
+   * сообщения, которого человек не видит.
+   */
+  'message.edit': (req, { runtime, device }) => {
+    const existing = runtime.store.messages.get(req.id);
+    if (!existing) throw new CommandError('not_found', 'Сообщения нет');
+    if (existing.role !== 'user') {
+      throw new CommandError('bad_request', 'Править можно только свой вопрос');
+    }
+
+    runtime.store.truncateFrom(existing.conversationId, req.id);
+
+    const { runId, message } = runtime.orchestrator.startRun({
+      conversationId: existing.conversationId,
+      parts: req.parts,
+      scopes: device.scopes,
+      platform: device.platform,
+    });
+    return { runId, message };
+  },
+
+  /**
+   * Тот же вопрос, другой ответ.
+   *
+   * Ищем последний вопрос человека и переспрашиваем им же. Всё, что было
+   * после — ответ, вызовы инструментов, их результаты, — убирается: это ветка,
+   * выросшая из прежней попытки, и оставлять её нельзя.
+   */
+  'message.regenerate': (req, { runtime, device }) => {
+    requireConversation(runtime, req.conversationId);
+
+    const recent = runtime.store.messages.recent(req.conversationId, 100);
+    const asked = [...recent].reverse().find((message) => message.role === 'user');
+    if (!asked) throw new CommandError('bad_request', 'Переспрашивать нечего');
+
+    runtime.store.truncateFrom(req.conversationId, asked.id);
+
+    const { runId, message } = runtime.orchestrator.startRun({
+      conversationId: req.conversationId,
+      parts: asked.parts,
+      scopes: device.scopes,
+      platform: device.platform,
+    });
+    return { runId, message };
+  },
+
   'run.cancel': (req, { runtime }) => {
     if (!runtime.orchestrator.cancel(req.runId)) {
       throw new CommandError('not_found', `Прогон ${req.runId} не выполняется`);

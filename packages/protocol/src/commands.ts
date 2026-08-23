@@ -127,6 +127,26 @@ export const zMessageSendRes = z.object({
   message: zMessage,
 });
 
+/**
+ * Переписать свой вопрос и получить другой ответ.
+ *
+ * Прежнее сообщение и всё, что выросло после него, убирается: изменённый
+ * вопрос делает недействительной всю ветку, а не только ближайший ответ.
+ * Иначе человек видел бы разговор, которого не было.
+ */
+export const zMessageEditReq = z.object({
+  id: zId,
+  parts: z.array(zContentPart).min(1),
+});
+
+/**
+ * Тот же вопрос, другой ответ.
+ *
+ * Убирается последний ответ агента вместе с вызовами инструментов, и прогон
+ * идёт заново от того же вопроса.
+ */
+export const zMessageRegenerateReq = z.object({ conversationId: zId });
+
 export const zRunCancelReq = z.object({ runId: zId });
 
 // ─── Разрешения ─────────────────────────────────────────────────────────────
@@ -308,6 +328,9 @@ export const commands = {
   'message.search': { req: zSearchReq, res: zSearchRes },
   'context.report': { req: z.object({ conversationId: zId }), res: zContextReport },
   'message.send': { req: zMessageSendReq, res: zMessageSendRes },
+  'message.edit': { req: zMessageEditReq, res: zMessageSendRes },
+  'message.regenerate': { req: zMessageRegenerateReq, res: zMessageSendRes },
+
   'run.cancel': { req: zRunCancelReq, res: zOkRes },
 
   'permission.resolve': { req: zPermissionResolveReq, res: zOkRes },
@@ -384,6 +407,8 @@ export const commandScopes: Record<CommandName, ReadonlyArray<z.infer<typeof zSc
   'message.search': ['chat.read'],
   'context.report': ['chat.read'],
   'message.send': ['chat.write'],
+  'message.edit': ['chat.write'],
+  'message.regenerate': ['chat.write'],
   'run.cancel': ['chat.write'],
   'permission.resolve': ['chat.write'],
   'tool.list': ['chat.read'],
