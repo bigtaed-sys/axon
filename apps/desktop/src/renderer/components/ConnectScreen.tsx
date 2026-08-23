@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import clsx from 'clsx';
-import type { Connection } from '../useAxon.js';
+import { host } from '../host.js';
+import type { Connection } from '../host.js';
 
 type Tab = 'embedded' | 'remote';
 
@@ -20,7 +21,15 @@ export function ConnectScreen({
   error: string | null;
   onConnected: () => void;
 }) {
-  const [tab, setTab] = useState<Tab>(current?.mode === 'remote' ? 'remote' : 'embedded');
+  /**
+   * Своё ядро есть не везде. На телефоне вкладки «на этом компьютере» быть не
+   * должно вовсе — не спрятанной, а отсутствующей: предлагать поднять ядро
+   * там, где его негде поднять, значит врать.
+   */
+  const local = host().local;
+  const [tab, setTab] = useState<Tab>(
+    !local || current?.mode === 'remote' ? 'remote' : 'embedded',
+  );
 
   return (
     <div className="flex-1 overflow-y-auto scrollbar">
@@ -41,16 +50,22 @@ export function ConnectScreen({
           </div>
         )}
 
-        <div className="seg mb-5">
-          <button type="button" aria-pressed={tab === 'embedded'} onClick={() => setTab('embedded')}>
-            На этом компьютере
-          </button>
-          <button type="button" aria-pressed={tab === 'remote'} onClick={() => setTab('remote')}>
-            На другом
-          </button>
-        </div>
+        {local && (
+          <div className="seg mb-5">
+            <button
+              type="button"
+              aria-pressed={tab === 'embedded'}
+              onClick={() => setTab('embedded')}
+            >
+              На этом компьютере
+            </button>
+            <button type="button" aria-pressed={tab === 'remote'} onClick={() => setTab('remote')}>
+              На другом
+            </button>
+          </div>
+        )}
 
-        {tab === 'embedded' ? (
+        {local && tab === 'embedded' ? (
           <EmbeddedTab current={current} onConnected={onConnected} />
         ) : (
           <RemoteTab current={current} onConnected={onConnected} />
@@ -95,7 +110,7 @@ function EmbeddedTab({
             setBusy(true);
             setFailure(null);
             try {
-              await window.axon!.useEmbedded();
+              await host().local!.use();
               onConnected();
             } catch (e) {
               setFailure((e as Error).message);
@@ -135,7 +150,7 @@ function RemoteTab({
     setFailure(null);
     setProbe(null);
     try {
-      setProbe(await window.axon!.probe(url));
+      setProbe(await host().probe(url));
     } catch (e) {
       setFailure((e as Error).message);
     } finally {
@@ -147,7 +162,7 @@ function RemoteTab({
     setBusy(true);
     setFailure(null);
     try {
-      await window.axon!.connectRemote({ url, code, name });
+      await host().connectRemote({ url, code, name });
       onConnected();
     } catch (e) {
       setFailure((e as Error).message);

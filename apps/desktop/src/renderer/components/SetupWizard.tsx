@@ -3,6 +3,7 @@ import clsx from 'clsx';
 import type { AxonClient } from '@axon/client-sdk';
 import type { ProviderInfo } from '@axon/protocol';
 import type { Connection } from '../useAxon.js';
+import { host } from '../host.js';
 
 /**
  * Что показать при первом знакомстве.
@@ -292,7 +293,7 @@ function Remote({ onBack, onConnected }: { onBack: () => void; onConnected: () =
     setBusy(true);
     setFailure(null);
     try {
-      await window.axon!.connectRemote({ url, code, name: 'Десктоп' });
+      await host().connectRemote({ url, code, name: 'Десктоп' });
       onConnected();
     } catch (e) {
       setFailure((e as Error).message);
@@ -369,7 +370,7 @@ function Local({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
   const [autostart, setAutostart] = useState<{ supported: boolean; enabled: boolean } | null>(null);
 
   useEffect(() => {
-    void window.axon?.autostart().then(setAutostart);
+    void host().local?.autostart().then(setAutostart);
   }, []);
 
   return (
@@ -392,7 +393,7 @@ function Local({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
           <button
             type="button"
             disabled={!autostart?.supported}
-            onClick={async () => setAutostart(await window.axon!.setAutostart(!autostart?.enabled))}
+            onClick={async () => setAutostart(await host().local!.setAutostart(!autostart?.enabled))}
             className={clsx(
               'mt-0.5 w-9 h-5 shrink-0 rounded-full transition-colors disabled:opacity-40',
               autostart?.enabled ? 'bg-accent' : 'bg-surface-high border border-border',

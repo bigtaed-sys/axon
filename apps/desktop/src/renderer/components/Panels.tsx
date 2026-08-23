@@ -12,7 +12,8 @@ import type {
   SecretStatus,
   ToolInfo,
 } from '@axon/protocol';
-import type { Connection } from '../useAxon.js';
+import { host } from '../host.js';
+import type { Connection } from '../host.js';
 
 /**
  * Ширина экрана.
@@ -140,7 +141,7 @@ export function DevicesPanel({
   const [scopes, setScopes] = useState<'full' | 'chat'>('chat');
 
   useEffect(() => {
-    void window.axon?.autostart().then(setAutostart);
+    void host().local?.autostart().then(setAutostart);
   }, []);
 
   useEffect(() => {

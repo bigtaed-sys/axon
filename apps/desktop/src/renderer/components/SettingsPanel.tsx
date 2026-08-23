@@ -15,6 +15,7 @@ import type { Connection } from '../useAxon.js';
 import { THEMES, type ThemeId } from '../theme.js';
 import type { MotionId } from '../motion.js';
 import { Toggle } from './Panels.js';
+import { host } from '../host.js';
 
 /**
  * Настройки.
@@ -1377,7 +1378,7 @@ function CorePage({
           <button
             type="button"
             onClick={async () => {
-              await window.axon!.stopLocal();
+              await host().local!.stop();
               onReconnect();
             }}
             className="mt-2.5 h-9 px-4 rounded-xl2 border border-border text-[13px] text-text-muted hover:bg-bg-hover hover:text-danger transition-colors"
@@ -1401,7 +1402,7 @@ function AccessPage({
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    void window.axon?.autostart().then(setAutostart);
+    void host().local?.autostart().then(setAutostart);
   }, []);
 
   const local = connection?.mode === 'embedded';
@@ -1466,7 +1467,7 @@ function AccessPage({
             on={Boolean(autostart?.enabled)}
             disabled={!autostart}
             onToggle={() => {
-              void window.axon!.setAutostart(!autostart?.enabled).then(setAutostart);
+              void host().local!.setAutostart(!autostart?.enabled).then(setAutostart);
             }}
           />
         )}

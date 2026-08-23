@@ -1,39 +1,8 @@
 import { useCallback, useEffect, useReducer, useState } from 'react';
 import { AxonClient, type ConnectionStatus } from '@axon/client-sdk';
+import { host, type Connection } from './host.js';
 
-export interface Connection {
-  mode: 'embedded' | 'remote';
-  url: string;
-  token: string;
-  label?: string;
-  /** Своё ядро открыто для устройств из локальной сети. */
-  exposed?: boolean;
-  /** Адреса, которые нужно набрать на другом устройстве. */
-  lan?: string[];
-}
-
-export interface AxonBridge {
-  connection(): Promise<{ connection: Connection | null; error: string | null }>;
-  useEmbedded(): Promise<Connection>;
-  setExposed(expose: boolean): Promise<Connection>;
-  connectRemote(input: { url: string; code: string; name: string }): Promise<Connection>;
-  probe(url: string): Promise<{ coreId: string; version: string; devices: number }>;
-  forgetRemote(): Promise<Connection>;
-  localStatus(): Promise<{ running: boolean }>;
-  stopLocal(): Promise<boolean>;
-  restartLocal(): Promise<Connection>;
-  autostart(): Promise<{ supported: boolean; enabled: boolean }>;
-  setAutostart(enable: boolean): Promise<{ supported: boolean; enabled: boolean }>;
-  /** Выбрать папку с плагином. `null` — человек передумал. */
-  pickFolder?(): Promise<string | null>;
-  titlebar?(colors: { color: string; symbolColor: string }): Promise<void>;
-}
-
-declare global {
-  interface Window {
-    axon?: AxonBridge;
-  }
-}
+export type { Connection } from './host.js';
 
 export interface AxonHandle {
   client: AxonClient | null;
@@ -84,7 +53,7 @@ export function useAxon(): AxonHandle {
     setError(null);
     setStatus('connecting');
     try {
-      await window.axon?.restartLocal();
+      await host().local?.restart();
       setCoreOutdated(false);
       nextGeneration();
     } catch (e) {
@@ -102,14 +71,7 @@ export function useAxon(): AxonHandle {
     setError(null);
 
     void (async () => {
-      const bridge = window.axon;
-      if (!bridge) {
-        setError('Приложение запущено вне Electron — нет моста к ядру');
-        setStatus('offline');
-        return;
-      }
-
-      const { connection: target, error: startupError } = await bridge.connection();
+      const { connection: target, error: startupError } = await host().connection();
       if (!active) return;
 
       setConnection(target);

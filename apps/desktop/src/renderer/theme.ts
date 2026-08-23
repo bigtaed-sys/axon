@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { host } from './host.js';
 
 export type ThemeId = 'mono-dark' | 'mono-light' | 'indigo-dark' | 'indigo-light';
 
@@ -35,7 +36,7 @@ export function useTheme(): { theme: ThemeId; setTheme: (theme: ThemeId) => void
     // от прошлой темы. Через кадр: переменные должны успеть примениться.
     requestAnimationFrame(() => {
       const style = getComputedStyle(document.documentElement);
-      void window.axon?.titlebar?.({
+      host().titlebar?.({
         color: toHex(style.getPropertyValue('--c-surface')),
         symbolColor: toHex(style.getPropertyValue('--c-text-muted')),
       });
