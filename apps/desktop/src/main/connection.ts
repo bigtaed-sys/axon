@@ -140,7 +140,13 @@ export class ConnectionManager {
       throw new Error(`Не удалось достучаться до ${url}. Проверьте адрес и что ядро запущено.`);
     });
 
-    if (response.status === 403) throw new Error('Код неверен или уже использован');
+    if (response.status === 403) {
+      // Код одноразовый и сгорает даже от неудачной попытки. Человек, у
+      // которого он не сработал, первым делом ищет, где взять новый.
+      throw new Error(
+        'Код неверен или уже использован. Новый выдаёт ядро: axon code на той машине, где оно запущено',
+      );
+    }
     if (!response.ok) throw new Error(`Ядро ответило ошибкой ${response.status}`);
 
     const paired = (await response.json()) as { token: string; core?: { coreId?: string } };

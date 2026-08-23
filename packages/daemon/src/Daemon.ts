@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -117,6 +118,11 @@ export class Daemon {
    * ответ, и мог бы показать его только целиком в самом конце.
    */
   private readonly signalListeners = new Set<(signal: Signal) => void>();
+  /**
+   * Пропуск для того, кто сидит за этой машиной: им подписан запрос на новый
+   * код подключения. Живёт в файле рядом с базой, с правами 0600.
+   */
+  private readonly controlToken = crypto.randomBytes(24).toString('hex');
   /** Разрешается, когда все установленные плагины отработали запуск. */
   pluginsReady: Promise<void> = Promise.resolve();
 
@@ -180,6 +186,7 @@ export class Daemon {
     };
 
     const bootstrapCode = this.pairing.ensureBootstrapCode();
+    this.writeControlToken();
     this.announce();
     logger.info({ url: this.address.url, coreId: this.runtime.coreId }, 'демон слушает');
 
@@ -339,6 +346,28 @@ export class Daemon {
    * же машине мог его найти, не завися от того, кто его поднял, адрес и pid
    * кладутся в файл рядом с базой.
    */
+  private controlPath(): string {
+    return path.join(this.runtime.config.dataDir, 'control.token');
+  }
+
+  /**
+   * Пропуск переписывается на каждом запуске: старый файл, оставшийся от
+   * убитого процесса, не должен открывать двери в новое ядро.
+   */
+  private writeControlToken(): void {
+    fs.mkdirSync(this.runtime.config.dataDir, { recursive: true });
+    fs.writeFileSync(this.controlPath(), `${this.controlToken}\n`, { mode: 0o600 });
+  }
+
+  /** Сравнение постоянного времени: пропуск подбирают по одному символу. */
+  private controlAllowed(given: string | string[] | undefined): boolean {
+    const value = Array.isArray(given) ? given[0] : given;
+    if (!value) return false;
+    const a = Buffer.from(value.trim());
+    const b = Buffer.from(this.controlToken);
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  }
+
   private announce(): void {
     const file = path.join(this.runtime.config.dataDir, 'core.json');
     fs.writeFileSync(
@@ -411,6 +440,48 @@ export class Daemon {
         devices: this.sessions.size,
         pendingPermissions: this.permissions.pendingCount,
       });
+    }
+
+    /**
+     * Выдать код подключения тому, кто сидит за этой машиной.
+     *
+     * Без неё человек, потерявший единственное устройство (или потративший
+     * одноразовый код на неудачную попытку), оставался запертым снаружи: код
+     * первого подключения живёт только пока устройств нет, а попросить новый
+     * можно было лишь с уже подключённого устройства.
+     *
+     * Доказательство права — не пароль, а доступ к файлу `control.token`
+     * рядом с базой: он лежит с правами 0600, и прочитать его может тот же,
+     * кто и так может прочитать саму базу с ключом шифрования. Проверять
+     * что-то сверх этого — театр. Но и меньше нельзя: ядро слушает сеть, и
+     * без файла ручка выдавала бы полный доступ любому, кто дотянется.
+     */
+    if (req.method === 'POST' && url.pathname === '/v1/control/pair') {
+      if (!this.controlAllowed(req.headers['x-axon-control'])) {
+        return respond(res, 403, { error: 'forbidden' });
+      }
+
+      const body = await readJson(req);
+      const chatOnly = body?.['scopes'] === 'chat';
+      const ttl = Number(body?.['ttlSeconds'] ?? 300);
+
+      const issued = this.pairing.begin({
+        name: typeof body?.['name'] === 'string' ? (body['name'] as string) : 'Новое устройство',
+        platform: 'desktop',
+        scopes: chatOnly
+          ? ['chat.read', 'chat.write', 'tools.safe']
+          : [
+              'chat.read',
+              'chat.write',
+              'tools.safe',
+              'tools.sensitive',
+              'tools.dangerous',
+              'settings.write',
+              'devices.manage',
+            ],
+        ttlSeconds: Number.isFinite(ttl) && ttl > 0 ? Math.min(ttl, 3600) : 300,
+      });
+      return respond(res, 200, issued);
     }
 
     // Единственная ручка без токена: новому устройству его ещё неоткуда взять.

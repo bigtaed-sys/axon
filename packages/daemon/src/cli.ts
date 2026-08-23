@@ -53,6 +53,8 @@ async function main(): Promise<void> {
       return await restore(args);
     case 'status':
       return await status();
+    case 'code':
+      return await code(args);
     case 'stop':
       return stop();
     case 'help':
@@ -147,6 +149,59 @@ async function start(args: string[]): Promise<void> {
   };
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
+}
+
+/**
+ * Новый код подключения.
+ *
+ * Код первого устройства живёт, только пока устройств нет, и сгорает после
+ * первой же попытки — в том числе неудачной. Дальше попросить новый можно было
+ * лишь с уже подключённого устройства, а если его нет или оно потеряно,
+ * человек оставался запертым снаружи собственного ядра.
+ *
+ * Право спросить доказывается доступом к файлу `control.token` рядом с базой:
+ * тот, кто может его прочитать, и так может прочитать саму базу вместе с
+ * ключом шифрования секретов. Требовать сверх этого нечего.
+ */
+async function code(args: string[]): Promise<void> {
+  const record = readRecord();
+  if (!record || !(await alive(record.url))) {
+    return fail('Ядро не запущено — код выдаёт оно само. Запустите: axon start');
+  }
+
+  const file = path.join(resolveConfig().dataDir, 'control.token');
+  let token: string;
+  try {
+    token = fs.readFileSync(file, 'utf8').trim();
+  } catch {
+    return fail(`Нет доступа к ${file} — код может выдать только хозяин ядра`);
+  }
+
+  // По умолчанию полный доступ: код спрашивают, когда подключают себе первое
+  // или единственное устройство. `--chat` — для чужого телефона в дороге.
+  const chatOnly = args.includes('--chat');
+  const ttl = Number(valueOf(args, '--ttl') ?? 300);
+
+  const response = await fetch(`${record.url}/v1/control/pair`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-axon-control': token },
+    body: JSON.stringify({ scopes: chatOnly ? 'chat' : 'full', ttlSeconds: ttl }),
+  }).catch(() => null);
+
+  if (!response?.ok) {
+    return fail(
+      response?.status === 403
+        ? 'Ядро не приняло пропуск. Похоже, оно перезапускалось — попробуйте ещё раз'
+        : 'Ядро не отдало код',
+    );
+  }
+
+  const issued = (await response.json()) as { code: string; expiresInSeconds: number };
+  console.log(issued.code);
+  console.log('');
+  console.log(`  действует ${Math.round(issued.expiresInSeconds / 60)} мин, одноразовый`);
+  console.log(`  права: ${chatOnly ? 'только переписка' : 'полные'}`);
+  console.log(`  адрес для приложения: ${(record.reachable ?? [])[0] ?? record.url}`);
 }
 
 /** Где искать, если ядро не поднялось: вывод фонового процесса пишется сюда. */
@@ -563,6 +618,7 @@ function usage(): void {
       --host 0.0.0.0                            открыть для других устройств
       --foreground, -f                          не уходить в фон (systemd, docker)
   axon status                                   запущено ли ядро и где
+  axon code [--chat] [--ttl 300]                новый код подключения устройства
   axon stop                                     остановить ядро
   axon secret list                              какие секреты заданы
   axon secret get <ключ>                        показать секрет целиком
