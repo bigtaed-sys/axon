@@ -10,6 +10,7 @@
     "build": "vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "sync": "npm run build && cap sync android",
+    "apk": "npm run sync && node build/apk.mjs",
     "android": "npm run sync && cap open android"
   },
   "dependencies": {

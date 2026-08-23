@@ -26,6 +26,13 @@ Thumbs.db
 .idea/
 .vscode/
 
-# Оболочка Android: генерируется `cap add android` из capacitor.config.ts.
-apps/mobile/android/
+# Оболочка Android лежит в репозитории — в ней иконки, разрешения и версия.
+# Не попадает только то, что рождается сборкой.
 apps/mobile/dist/
+apps/mobile/android/build/
+apps/mobile/android/app/build/
+apps/mobile/android/capacitor-cordova-android-plugins/build/
+apps/mobile/android/.gradle/
+apps/mobile/android/local.properties
+apps/mobile/Axon-*.apk
+apps/mobile/android/app/src/main/assets/public/
