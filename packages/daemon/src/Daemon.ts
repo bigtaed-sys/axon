@@ -431,6 +431,29 @@ export class Daemon {
   private async onRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     const url = new URL(req.url ?? '/', 'http://localhost');
 
+    /**
+     * Вложения ходят обычным HTTP, а окно приложения живёт на своей схеме
+     * (`axon://app`) — для браузера это другой источник. Загрузка файла несёт
+     * заголовок `Authorization`, а такой запрос браузер сначала спрашивает
+     * отдельным `OPTIONS`. Без ответа на него загрузка обрывается ещё до
+     * ядра, и человек видит голое «failed to fetch» под картинкой.
+     *
+     * Разрешаем любой источник намеренно: без токена устройства эти ручки
+     * бесполезны, а токен чужой странице взять неоткуда. Пейринг сюда не
+     * входит — там токен как раз выдают.
+     */
+    if (url.pathname.startsWith('/v1/blobs')) {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Headers', 'authorization, content-type');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Max-Age', '86400');
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+    }
+
     if (req.method === 'GET' && url.pathname === '/health') {
       return respond(res, 200, {
         ok: true,

@@ -373,6 +373,34 @@ describe('блобы', () => {
     expect(download.headers.get('etag')).toBeTruthy();
   });
 
+  it('браузеру разрешено спросить разрешение на загрузку', async () => {
+    // Окно приложения живёт на своей схеме (`axon://app`), ядро отвечает по
+    // http — для браузера это разные источники. Загрузка несёт заголовок
+    // `Authorization`, а такой запрос браузер сначала спрашивает отдельным
+    // `OPTIONS`. Без ответа на него вложение не уходило вовсе, и человек
+    // видел под картинкой голое «failed to fetch».
+    const preflight = await fetch(`${daemon.url}/v1/blobs`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'axon://app',
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'authorization, content-type',
+      },
+    });
+
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get('access-control-allow-origin')).toBe('*');
+    expect(preflight.headers.get('access-control-allow-headers')).toContain('authorization');
+
+    // Разрешение на сам ответ тоже нужно: без него браузер прочитать его не даст.
+    const upload = await fetch(`${daemon.url}/v1/blobs`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'text/plain' },
+      body: 'вложение',
+    });
+    expect(upload.headers.get('access-control-allow-origin')).toBe('*');
+  });
+
   it('одинаковое содержимое не дублируется на диске', async () => {
     const send = async (): Promise<string> => {
       const response = await fetch(`${daemon.url}/v1/blobs`, {
