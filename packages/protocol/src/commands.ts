@@ -230,6 +230,21 @@ export const zObservationForgetReq = z.object({ id: zId });
  * Значения шагов наружу не возвращаются никогда: ни код, ни пароль, ни готовая
  * сессия. Сессия — полный доступ к аккаунту, она уходит прямо в секреты.
  */
+/**
+ * Нажали кнопку на странице настроек плагина.
+ *
+ * Ответ — текст для человека, а не структура: плагин сам знает, что сказать
+ * про своё подключение, а ядру незачем это разбирать.
+ */
+export const zPluginActionReq = z.object({
+  id: zPluginId,
+  action: z.string().min(1).max(60),
+});
+export const zPluginActionRes = z.object({
+  ok: z.boolean(),
+  message: z.string().max(2000),
+});
+
 export const zTelegramLoginReq = z.object({
   step: z.enum(['phone', 'code', 'password', 'cancel']),
   value: z.string().max(200).default(''),
@@ -318,6 +333,7 @@ export const commands = {
   'plugin.reload': { req: zPluginIdReq, res: zOkRes },
   'plugin.update': { req: zPluginIdReq, res: zPluginInstallRes },
   'plugin.configure': { req: zPluginConfigureReq, res: zOkRes },
+  'plugin.action': { req: zPluginActionReq, res: zPluginActionRes },
   'plugin.logs': { req: zPluginLogsReq, res: zPluginLogsRes },
 
   'skill.setEnabled': { req: zSkillSetEnabledReq, res: zOkRes },
@@ -396,6 +412,7 @@ export const commandScopes: Record<CommandName, ReadonlyArray<z.infer<typeof zSc
   // установка, поэтому и права те же.
   'plugin.update': ['settings.write', 'devices.manage'],
   'plugin.configure': ['settings.write'],
+  'plugin.action': ['settings.write'],
   'plugin.logs': ['settings.write'],
   'skill.setEnabled': ['settings.write'],
   'settings.get': ['chat.read'],

@@ -299,6 +299,12 @@ const handlers: Handlers = {
     return ok;
   },
 
+  'plugin.action': async (req, { runtime }) => {
+    const plugin = runtime.plugins.get(req.id);
+    if (!plugin) throw new CommandError('not_found', `Плагин ${req.id} не установлен`);
+    return await plugin.runAction(req.action);
+  },
+
   'plugin.logs': (req, { runtime }) => {
     try {
       return { lines: runtime.plugins.logs(req.id, req.limit) };

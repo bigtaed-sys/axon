@@ -82,13 +82,58 @@ export const zPluginSettingField = z.object({
    * `secret` хранится шифрованным и не отдаётся обратно клиенту — только
    * признак «задано». Всё остальное лежит в обычных настройках.
    */
-  type: z.enum(['text', 'secret', 'number', 'boolean', 'select', 'path']),
+  type: z.enum(['text', 'secret', 'number', 'boolean', 'select', 'path', 'textarea']),
   options: z.array(z.object({ value: z.string(), label: z.string() })).optional(),
   default: z.unknown().optional(),
   required: z.boolean().default(false),
   placeholder: z.string().max(200).optional(),
+  /**
+   * Показывать поле, только когда другое имеет заданное значение.
+   *
+   * Без этого плагин с двумя способами подключения вываливает поля обоих
+   * сразу, и человек заполняет половину впустую. Условие простое до
+   * неприличия — одно поле, одно значение: сложнее бывает нужно редко, а
+   * язык выражений в манифесте плагина означал бы интерпретатор в ядре.
+   */
+  visibleWhen: z.object({ key: z.string(), equals: z.unknown() }).optional(),
 });
 export type PluginSettingField = z.infer<typeof zPluginSettingField>;
+
+/**
+ * Раздел на странице настроек плагина.
+ *
+ * Плоский список полей годится, пока их пять. Дальше человек смотрит на два
+ * десятка подписей и не понимает, какие из них связаны между собой.
+ */
+export const zPluginSettingSection = z.object({
+  title: z.string().max(120),
+  description: z.string().max(600).optional(),
+  fields: z.array(z.string()).default([]),
+});
+export type PluginSettingSection = z.infer<typeof zPluginSettingSection>;
+
+/**
+ * Кнопка на странице настроек: «проверить подключение», «обновить список».
+ *
+ * Плагин объявляет её, ядро зовёт обработчик, интерфейс показывает, что
+ * вернулось. Это тот минимум, ради которого страница вообще нужна: настройки
+ * без способа проверить, что они верные, — это анкета, а не настройка.
+ *
+ * Обратите внимание, чего здесь нет: разметки, стилей, кода для окна. Плагин
+ * описывает, что показать, а рисует приложение. Дать плагину рисовать самому
+ * значило бы пустить его код в окно с полным доступом к ядру — ровно то, от
+ * чего его отделили отдельным процессом.
+ */
+export const zPluginAction = z.object({
+  name: z.string().min(1).max(60),
+  label: z.string().max(120),
+  description: z.string().max(400).optional(),
+  /** Раздел, в котором показать кнопку. Пусто — внизу страницы. */
+  section: z.string().max(120).optional(),
+  /** Спросить подтверждение перед вызовом. Для необратимого. */
+  confirm: z.string().max(300).optional(),
+});
+export type PluginAction = z.infer<typeof zPluginAction>;
 
 // ─── Манифест ───────────────────────────────────────────────────────────────
 
@@ -115,6 +160,8 @@ export const zPluginManifest = z.object({
   main: z.string().max(200).optional(),
   permissions: z.array(zPluginPermission).default([]),
   settings: z.array(zPluginSettingField).default([]),
+  sections: z.array(zPluginSettingSection).default([]),
+  actions: z.array(zPluginAction).default([]),
   /** Папка со скиллами (*.md) относительно корня плагина. */
   skills: z.string().max(200).optional(),
   mcpServers: z.record(zMcpTransport).default({}),
@@ -168,6 +215,8 @@ export const zPluginInfo = z.object({
   permissions: z.array(zPluginPermission).default([]),
   /** Форма настроек — интерфейс рисует её по этому описанию. */
   settings: z.array(zPluginSettingField).default([]),
+  sections: z.array(zPluginSettingSection).default([]),
+  actions: z.array(zPluginAction).default([]),
   /**
    * Текущие значения. Секреты сюда не попадают: вместо значения — `true`,
    * если задано. Иначе токен уехал бы на каждое устройство в снапшоте.

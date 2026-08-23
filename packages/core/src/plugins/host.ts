@@ -15,6 +15,7 @@ import {
   HOST_READY,
   TO_CORE,
   TO_PLUGIN,
+  type ActionRunParams,
   type ActivateParams,
   type ContributeParams,
   type JobRunParams,
@@ -49,6 +50,8 @@ export function startPluginHost(): void {
   >();
   const providers = new Map<string, PluginProvider>();
   const jobs = new Map<string, () => Promise<void> | void>();
+  /** Обработчики кнопок со страницы настроек. */
+  const actions = new Map<string, () => Promise<string | void> | string | void>();
   const journalListeners: Array<(entry: never) => void> = [];
   const settingsListeners: Array<(values: Record<string, unknown>) => void> = [];
 
@@ -136,6 +139,10 @@ export function startPluginHost(): void {
         on: (name, run) => jobs.set(name, run),
       },
 
+      actions: {
+        on: (name, run) => actions.set(name, run),
+      },
+
       journal: {
         on: (listener) => journalListeners.push(listener as (entry: never) => void),
       },
@@ -211,6 +218,25 @@ export function startPluginHost(): void {
       ctx.push(event satisfies PluginChatEvent);
     }
     return null;
+  });
+
+  peer.handle(TO_PLUGIN.actionRun, async (params: ActionRunParams) => {
+    const handler = actions.get(params.name);
+    if (!handler) throw new Error(`Плагин не знает действия «${params.name}»`);
+
+    /**
+     * Отказ действия — не поломка плагина.
+     *
+     * «Не удалось подключиться» — законный ответ кнопки «проверить
+     * подключение», и падать из-за него нельзя: человек нажал именно затем,
+     * чтобы узнать результат.
+     */
+    try {
+      const message = await handler();
+      return { ok: true, message: message || 'Готово' };
+    } catch (error) {
+      return { ok: false, message: (error as Error).message };
+    }
   });
 
   peer.handle(TO_PLUGIN.jobRun, async (params: JobRunParams) => {

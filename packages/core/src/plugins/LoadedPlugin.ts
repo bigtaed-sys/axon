@@ -105,6 +105,8 @@ export class LoadedPlugin {
       origin: this.origin,
       permissions: this.manifest.permissions,
       settings: this.manifest.settings,
+      sections: this.manifest.sections,
+      actions: this.manifest.actions,
       settingValues: this.publicSettings(),
       enabled: this.enabled,
       status: this.status,
@@ -668,4 +670,26 @@ export class LoadedPlugin {
       if (job.immediate) void run();
     }
   }
+
+  /**
+   * Нажали кнопку на странице настроек.
+   *
+   * Отдельный таймаут короче задачного: человек ждёт у экрана, и полминуты —
+   * предел, после которого он решает, что сломалось.
+   */
+  async runAction(name: string): Promise<{ ok: boolean; message: string }> {
+    if (!this.manifest.actions.some((action) => action.name === name)) {
+      return { ok: false, message: `Плагин не объявлял действия «${name}»` };
+    }
+    if (!this.process) {
+      return { ok: false, message: 'Плагин не запущен' };
+    }
+
+    return (await this.process.call(
+      TO_PLUGIN.actionRun,
+      { name },
+      { timeoutMs: 30_000 },
+    )) as { ok: boolean; message: string };
+  }
+
 }

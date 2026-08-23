@@ -1,0 +1,67 @@
+{
+  "id": "feeds",
+  "name": "Ленты",
+  "description": "Следит за RSS-лентами и приносит агенту свежие заголовки",
+  "version": "1.0.0",
+  "author": "Axon",
+  "api": 1,
+  "main": "./index.js",
+  "permissions": ["net"],
+  "settings": [
+    {
+      "key": "urls",
+      "label": "Адреса лент",
+      "description": "По одной в строке. Подойдёт любой RSS или Atom.",
+      "type": "textarea",
+      "placeholder": "https://example.com/feed.xml",
+      "required": true
+    },
+    {
+      "key": "limit",
+      "label": "Сколько заголовков помнить",
+      "type": "number",
+      "default": 30
+    },
+    {
+      "key": "inPrompt",
+      "label": "Подмешивать свежее в разговор",
+      "description": "Агент будет видеть последние заголовки и сможет ссылаться на них сам, без вызова инструмента.",
+      "type": "boolean",
+      "default": false
+    },
+    {
+      "key": "promptCount",
+      "label": "Сколько заголовков показывать агенту",
+      "type": "number",
+      "default": 5,
+      "visibleWhen": { "key": "inPrompt", "equals": true }
+    }
+  ],
+  "sections": [
+    {
+      "title": "Ленты",
+      "description": "Обновляются раз в час. Кнопкой ниже можно проверить прямо сейчас — заодно видно, какие адреса отвечают.",
+      "fields": ["urls", "limit"]
+    },
+    {
+      "title": "В разговоре",
+      "description": "Заголовки в промпте стоят токенов на каждом ходу. Включайте, если следите за лентами постоянно; иначе агенту хватит инструмента.",
+      "fields": ["inPrompt", "promptCount"]
+    }
+  ],
+  "actions": [
+    {
+      "name": "refresh",
+      "label": "Проверить сейчас",
+      "description": "Скачать ленты и показать, что получилось",
+      "section": "Ленты"
+    },
+    {
+      "name": "forget",
+      "label": "Забыть накопленное",
+      "section": "Ленты",
+      "confirm": "Удалить все сохранённые заголовки?"
+    }
+  ],
+  "jobs": [{ "name": "обновление", "everySeconds": 3600, "immediate": true }]
+}

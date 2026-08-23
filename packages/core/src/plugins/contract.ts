@@ -55,6 +55,16 @@ export interface JobRunParams {
   name: string;
 }
 
+/** Нажали кнопку на странице настроек плагина. */
+export interface ActionRunParams {
+  name: string;
+}
+
+export interface ActionRunResult {
+  ok: boolean;
+  message: string;
+}
+
 export const TO_PLUGIN = {
   activate: 'activate',
   deactivate: 'deactivate',
@@ -62,6 +72,7 @@ export const TO_PLUGIN = {
   contribute: 'context.contribute',
   providerChat: 'provider.chat',
   jobRun: 'job.run',
+  actionRun: 'action.run',
   /** События: ответа нет. */
   settingsChanged: 'settings.changed',
   journalEvent: 'journal.event',

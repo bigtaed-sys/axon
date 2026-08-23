@@ -2,7 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
 import type { AxonClient } from '@axon/client-sdk';
 import { parseMcpConfig } from '@axon/protocol';
-import type { CatalogEntry, PluginInfo, PluginSettingField, PluginStatus } from '@axon/protocol';
+import type {
+  CatalogEntry,
+  PluginAction,
+  PluginInfo,
+  PluginSettingField,
+  PluginStatus,
+} from '@axon/protocol';
 import { Empty, KindBadge, Screen, TIER, Toggle } from './Panels.js';
 
 /**
@@ -515,13 +521,8 @@ function PluginCard({
       </div>
 
       <div className="mt-2.5 pl-4 flex items-center gap-1.5 flex-wrap">
-        {plugin.settings.length > 0 && (
-          <MiniButton
-            icon="bi-sliders"
-            label="Настройки"
-            active={open}
-            onClick={() => setOpen((v) => !v)}
-          />
+        {(plugin.settings.length > 0 || plugin.actions.length > 0) && (
+          <MiniButton icon="bi-gear-fill" label="Настройки" onClick={() => setOpen(true)} />
         )}
         <MiniButton icon="bi-terminal" label="Логи" active={logs !== null} onClick={showLogs} />
         {plugin.origin.type === 'git' && (
@@ -556,7 +557,7 @@ function PluginCard({
       </div>
 
       {open && plugin.settings.length > 0 && (
-        <SettingsForm plugin={plugin} client={client} onSaved={() => setOpen(false)} />
+        <PluginSettings plugin={plugin} client={client} onClose={() => setOpen(false)} />
       )}
 
       {logs && (
@@ -623,17 +624,51 @@ function MiniButton({
 
 // ─── Форма настроек ────────────────────────────────────────────────────────
 
-function SettingsForm({
+/**
+ * Страница настроек плагина.
+ *
+ * Раньше это была форма, разворачивавшаяся прямо в карточке. Пока полей три,
+ * так и лучше; но плагин с десятком полей, разделами и кнопкой «проверить
+ * подключение» превращал список плагинов в простыню, где не найти ни сам
+ * список, ни нужное поле.
+ *
+ * Плагин описывает страницу, а рисует её приложение. Ни разметки, ни кода для
+ * окна плагин не присылает — иначе его код оказался бы в окне с полным
+ * доступом к ядру, ровно там, откуда его убрали отдельным процессом.
+ */
+function PluginSettings({
   plugin,
   client,
-  onSaved,
+  onClose,
 }: {
   plugin: PluginInfo;
   client: AxonClient;
-  onSaved: () => void;
+  onClose: () => void;
 }) {
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [running, setRunning] = useState<string | null>(null);
+  const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null);
+
+  /** Значение поля с учётом несохранённой правки. */
+  const valueOf = (key: string): unknown =>
+    draft[key] ?? (plugin.settingValues[key] as string | undefined);
+
+  /**
+   * Показывать ли поле.
+   *
+   * Условие смотрит на текущее значение, включая ещё не сохранённое: человек
+   * выбирает способ подключения и тут же видит поля именно для него, а не
+   * после сохранения.
+   */
+  const visible = (field: PluginSettingField): boolean => {
+    if (!field.visibleWhen) return true;
+    return String(valueOf(field.visibleWhen.key) ?? '') === String(field.visibleWhen.equals ?? '');
+  };
+
+  const shown = plugin.settings.filter(visible);
+  const grouped = new Set(plugin.sections.flatMap((section) => section.fields));
+  const loose = shown.filter((field) => !grouped.has(field.key));
 
   const save = (): void => {
     setSaving(true);
@@ -651,30 +686,131 @@ function SettingsForm({
 
     void client
       .call('plugin.configure', { id: plugin.id, values, secrets })
-      .then(onSaved)
+      .then(() => {
+        setDraft({});
+        setSaid({ ok: true, text: 'Сохранено' });
+      })
+      .catch((error: Error) => setSaid({ ok: false, text: error.message }))
       .finally(() => setSaving(false));
   };
 
+  const act = (action: PluginAction): void => {
+    if (action.confirm && !window.confirm(action.confirm)) return;
+
+    setRunning(action.name);
+    setSaid(null);
+    void client
+      .call('plugin.action', { id: plugin.id, action: action.name })
+      .then((res) => setSaid({ ok: res.ok, text: res.message }))
+      .catch((error: Error) => setSaid({ ok: false, text: error.message }))
+      .finally(() => setRunning(null));
+  };
+
+  const field = (key: string) => {
+    const found = shown.find((item) => item.key === key);
+    if (!found) return null;
+    return (
+      <FieldInput
+        key={found.key}
+        field={found}
+        current={plugin.settingValues[found.key]}
+        value={draft[found.key]}
+        onChange={(value) => setDraft((d) => ({ ...d, [found.key]: value }))}
+      />
+    );
+  };
+
+  const buttons = (section?: string) =>
+    plugin.actions
+      .filter((action) => (action.section ?? '') === (section ?? ''))
+      .map((action) => (
+        <button
+          key={action.name}
+          type="button"
+          title={action.description ?? ''}
+          disabled={running !== null}
+          onClick={() => act(action)}
+          className="h-8 px-3 rounded-lg border border-border text-[12px] text-text-muted hover:border-accent hover:text-text disabled:opacity-40 transition-colors"
+        >
+          {running === action.name ? '…' : action.label}
+        </button>
+      ));
+
   return (
-    <div className="mt-2.5 ml-4 p-3 rounded-lg bg-bg border border-border">
-      {plugin.settings.map((field) => (
-        <FieldInput
-          key={field.key}
-          field={field}
-          // У секрета показывать нечего: ядро отдаёт только признак «задан».
-          current={plugin.settingValues[field.key]}
-          value={draft[field.key]}
-          onChange={(value) => setDraft((d) => ({ ...d, [field.key]: value }))}
-        />
-      ))}
-      <button
-        type="button"
-        disabled={saving || Object.keys(draft).length === 0}
-        onClick={save}
-        className="mt-1 h-8 px-3 rounded-lg bg-accent text-accent-fg text-[12px] font-medium disabled:opacity-40 hover:opacity-90 transition-opacity"
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-6"
+      onClick={onClose}
+    >
+      <div
+        className="card w-full max-w-xl max-h-[80vh] flex flex-col rise"
+        onClick={(e) => e.stopPropagation()}
       >
-        {saving ? 'Сохраняю…' : 'Сохранить'}
-      </button>
+        <div className="flex items-center gap-2.5 px-5 pt-5 pb-3">
+          <i className="bi bi-gear-fill text-accent" />
+          <div className="min-w-0 flex-1">
+            <h3 className="text-[15px] font-semibold truncate">{plugin.name}</h3>
+            <p className="text-[11px] text-text-dim truncate">{plugin.description}</p>
+          </div>
+          <button type="button" onClick={onClose} className="text-text-dim hover:text-text">
+            <i className="bi bi-x-lg text-[12px]" />
+          </button>
+        </div>
+
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar px-5 py-4 space-y-5">
+          {plugin.sections.map((section) => (
+            <section key={section.title}>
+              <h4 className="text-[13px] font-semibold">{section.title}</h4>
+              {section.description && (
+                <p className="mt-1 mb-3 text-[11px] text-text-dim leading-relaxed">
+                  {section.description}
+                </p>
+              )}
+              {section.fields.map((key) => field(key))}
+              <div className="mt-2 flex flex-wrap gap-1.5">{buttons(section.title)}</div>
+            </section>
+          ))}
+
+          {loose.length > 0 && (
+            <section>
+              {plugin.sections.length > 0 && (
+                <h4 className="text-[13px] font-semibold mb-2">Прочее</h4>
+              )}
+              {loose.map((item) => field(item.key))}
+            </section>
+          )}
+
+          <div className="flex flex-wrap gap-1.5">{buttons()}</div>
+
+          {said && (
+            <p
+              className={clsx(
+                'text-[12px] leading-relaxed',
+                said.ok ? 'text-success' : 'text-danger',
+              )}
+            >
+              {said.text}
+            </p>
+          )}
+        </div>
+
+        <div className="px-5 py-4 border-t border-border flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-9 px-4 rounded-lg border border-border text-[12px] text-text-muted hover:text-text transition-colors"
+          >
+            Закрыть
+          </button>
+          <button
+            type="button"
+            disabled={saving || Object.keys(draft).length === 0}
+            onClick={save}
+            className="h-9 px-4 rounded-lg bg-accent text-accent-fg text-[12px] font-medium disabled:opacity-40 hover:opacity-90 transition-opacity"
+          >
+            {saving ? 'Сохраняю…' : 'Сохранить'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -711,6 +847,14 @@ function FieldInput({
         <Toggle
           on={(value ?? String(current)) === 'true'}
           onClick={() => onChange(String((value ?? String(current)) !== 'true'))}
+        />
+      ) : field.type === 'textarea' ? (
+        <textarea
+          rows={5}
+          value={value ?? String(current ?? '')}
+          placeholder={placeholder}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full px-2 py-1.5 rounded-lg bg-surface border border-border text-[12px] font-mono leading-relaxed outline-none focus:border-accent transition-colors resize-y scrollbar"
         />
       ) : field.type === 'select' ? (
         <select
