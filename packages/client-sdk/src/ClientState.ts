@@ -16,7 +16,7 @@ export interface RunStream {
   runId: string;
   /** Накопленный текст ответа. Черновик: итог придёт событием. */
   text: string;
-  phase: 'thinking' | 'calling_tool' | 'awaiting_permission' | 'summarizing';
+  phase: 'thinking' | 'calling_tool' | 'awaiting_permission' | 'summarizing' | 'retrying';
   detail?: string;
   tokensSpent: number;
   costUsd: number;

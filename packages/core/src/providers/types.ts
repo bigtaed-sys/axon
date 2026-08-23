@@ -117,7 +117,18 @@ export class ProviderError extends Error {
   constructor(
     readonly kind: ProviderErrorKind,
     message: string,
-    readonly options: { provider: string; status?: number; retryable?: boolean } = {
+    readonly options: {
+      provider: string;
+      status?: number;
+      retryable?: boolean;
+      /**
+       * Сколько провайдер просил подождать, в миллисекундах.
+       *
+       * Заголовок `Retry-After` при 429 — не пожелание: попытка раньше срока
+       * почти наверняка получит такой же отказ и приблизит настоящий бан.
+       */
+      retryAfterMs?: number;
+    } = {
       provider: 'unknown',
     },
   ) {

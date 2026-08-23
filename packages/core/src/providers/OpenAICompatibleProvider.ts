@@ -133,7 +133,10 @@ export class OpenAICompatibleProvider implements Provider {
       case 404:
         return new ProviderError('model_not_found', `Не найдено: ${text.slice(0, 200)}`, base);
       case 429:
-        return new ProviderError('rate_limit', 'Превышен лимит запросов', base);
+        return new ProviderError('rate_limit', 'Превышен лимит запросов', {
+          ...base,
+          ...(retryAfter(response) === null ? {} : { retryAfterMs: retryAfter(response)! }),
+        });
       default:
         return new ProviderError('upstream', `HTTP ${response.status}: ${text.slice(0, 300)}`, base);
     }
@@ -337,4 +340,22 @@ interface StreamChunk {
   }>;
   usage?: RawUsage;
   error?: { message?: string } | string;
+}
+
+/**
+ * Сколько провайдер просит подождать перед следующей попыткой.
+ *
+ * `Retry-After` бывает в двух видах: секунды числом или дата по HTTP. Второй
+ * встречается реже, но встречается, и разобрать надо оба — иначе повтор уйдёт
+ * раньше срока и получит такой же отказ.
+ */
+export function retryAfter(response: { headers: Headers }): number | null {
+  const raw = response.headers.get('retry-after');
+  if (!raw) return null;
+
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+
+  const at = Date.parse(raw);
+  return Number.isNaN(at) ? null : Math.max(0, at - Date.now());
 }

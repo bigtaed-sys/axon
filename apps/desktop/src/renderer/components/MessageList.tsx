@@ -11,6 +11,7 @@ const PHASE: Record<RunStream['phase'], string> = {
   calling_tool: 'вызывает инструмент',
   awaiting_permission: 'ждёт разрешения',
   summarizing: 'сворачивает историю',
+  retrying: 'пробует снова',
 };
 
 export function MessageList({

@@ -23,7 +23,18 @@ export const zSignal = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('run.phase'),
     runId: zId,
-    phase: z.enum(['thinking', 'calling_tool', 'awaiting_permission', 'summarizing']),
+    /**
+     * `retrying` — ждём и пробуем снова после отказа провайдера. Без этой фазы
+     * пауза в восемь секунд выглядит как зависание, и человек жмёт «стоп»
+     * ровно тогда, когда ядро само бы справилось.
+     */
+    phase: z.enum([
+      'thinking',
+      'calling_tool',
+      'awaiting_permission',
+      'summarizing',
+      'retrying',
+    ]),
     /** Имя инструмента для фазы calling_tool. */
     detail: z.string().optional(),
   }),

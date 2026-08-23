@@ -11,6 +11,7 @@ import type {
   Usage,
 } from '@axon/protocol';
 import { logger } from '../logger.js';
+import { decideRetry, sleep } from './retry.js';
 import { ProviderError } from '../providers/types.js';
 import type { ProviderRegistry } from '../providers/ProviderRegistry.js';
 import type { Store } from '../storage/Store.js';
@@ -230,6 +231,14 @@ export class Orchestrator {
       const calls: ToolCall[] = [];
       let stopReason: StopReason = 'end_turn';
 
+      /**
+       * Обращение к модели с повтором.
+       *
+       * Повторяем только пока ничего не пришло: куски ответа уходят клиенту
+       * сигналами по мере генерации, и вторая попытка после половины ответа
+       * напечатала бы эту половину дважды. Правило и задержки — в `retry.ts`.
+       */
+      for (let attempt = 0; ; attempt += 1) {
       try {
         for await (const event of provider.chat({
           model,
@@ -272,11 +281,25 @@ export class Orchestrator {
               break;
           }
         }
+        break;
       } catch (e) {
         if (signal.aborted || (e instanceof ProviderError && e.kind === 'cancelled')) {
           return this.finish(runId, conversationId, 'cancelled', totals, iterations);
         }
-        throw e;
+
+        const again = decideRetry(e, attempt, text === '' && calls.length === 0);
+        if (!again) throw e;
+
+        // Молчаливая пауза в восемь секунд неотличима от зависания, и человек
+        // жмёт «стоп» ровно тогда, когда ядро само бы справилось.
+        sink.emit({ type: 'run.phase', runId, phase: 'retrying', detail: again.reason });
+        logger.warn(
+          { err: (e as Error).message, attempt, waitMs: again.waitMs },
+          'повтор обращения к модели',
+        );
+
+        await sleep(again.waitMs, signal);
+      }
       }
 
       if (calls.length === 0) {
