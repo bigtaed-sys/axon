@@ -8,6 +8,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Запустить руками — когда упало не из-за кода, а из-за сети или реестра.
+  workflow_dispatch:
 
 jobs:
   checks:
