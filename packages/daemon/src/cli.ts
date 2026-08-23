@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
-import { createRuntime, resolveConfig } from '@axon/core';
+import { createBackup, createRuntime, resolveConfig, restoreBackup } from '@axon/core';
 import { parseMcpConfig } from '@axon/protocol';
 import { Daemon } from './Daemon.js';
 
@@ -44,6 +44,10 @@ async function main(): Promise<void> {
     case 'plugin':
     case 'plugins':
       return await plugin(args);
+    case 'backup':
+      return await backup(args);
+    case 'restore':
+      return await restore(args);
     case 'status':
       return await status();
     case 'stop':
@@ -290,6 +294,89 @@ async function plugin(args: string[]): Promise<void> {
   }
 }
 
+/**
+ * Снять копию.
+ *
+ * Ядро останавливать не нужно: база копируется средствами самой SQLite,
+ * согласованным снимком.
+ */
+async function backup(args: string[]): Promise<void> {
+  const withKeys = args.includes('--with-keys');
+  const target = args.find((arg) => !arg.startsWith('--')) ?? defaultBackupName();
+
+  const config = resolveConfig();
+  const result = await createBackup(config, target, { includeSecretKey: withKeys });
+
+  console.log(`Копия: ${result.path}`);
+  console.log(`  ${result.files} файлов, ${(result.bytes / 1024 / 1024).toFixed(1)} МБ`);
+
+  if (result.withSecretKey) {
+    console.log('');
+    console.log('  В копии лежит ключ шифрования — значит, и все секреты:');
+    console.log('  ключи от моделей, токен бота, сессия телеграма.');
+    console.log('  Держите её там же, где держали бы сами эти ключи.');
+  } else {
+    console.log('');
+    console.log('  Ключ шифрования в копию не положен — секреты из неё не достать.');
+    console.log('  После восстановления ключи придётся ввести заново.');
+    console.log('  Нужен ключ внутри — добавьте --with-keys.');
+  }
+}
+
+/**
+ * Развернуть копию.
+ *
+ * Ядро при этом должно быть остановлено: разворачивать базу под живым
+ * процессом — верный способ получить и битую копию, и битый оригинал.
+ */
+async function restore(args: string[]): Promise<void> {
+  const archive = args.find((arg) => !arg.startsWith('--'));
+  if (!archive) {
+    console.error('Укажите файл копии: axon restore <файл>');
+    process.exitCode = 1;
+    return;
+  }
+
+  const config = resolveConfig();
+
+  if (running(config.dataDir)) {
+    console.error('Ядро запущено. Сначала остановите его: axon stop');
+    process.exitCode = 1;
+    return;
+  }
+
+  const result = await restoreBackup(archive, config.dataDir);
+  console.log(`Развёрнуто в ${config.dataDir}: ${result.files} файлов.`);
+
+  if (!result.withSecretKey) {
+    console.log('');
+    console.log('  Ключа шифрования в копии не было — секреты не восстановлены.');
+    console.log('  Введите заново ключи провайдеров и, если пользуетесь, токен бота.');
+  }
+}
+
+/** Имя копии по умолчанию: с датой, чтобы соседние не затирали друг друга. */
+function defaultBackupName(): string {
+  const now = new Date().toISOString().slice(0, 10);
+  return `axon-${now}.axon-backup`;
+}
+
+/** Работает ли ядро прямо сейчас — по заявке, которую оно кладёт рядом с данными. */
+function running(dataDir: string): boolean {
+  const file = path.join(dataDir, 'core.json');
+  if (!fs.existsSync(file)) return false;
+
+  try {
+    const { pid } = JSON.parse(fs.readFileSync(file, 'utf8')) as { pid?: number };
+    if (!pid) return false;
+    // Сигнал 0 ничего не делает, но падает, если процесса нет.
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function usage(): void {
   console.log(`Axon — персональный AI-агент
 
@@ -301,6 +388,9 @@ function usage(): void {
   axon secret get <ключ>                        показать секрет целиком
   axon secret set <ключ> <значение>             записать секрет
   axon devices                                  список подключённых устройств
+
+  axon backup [файл] [--with-keys]              снять копию (ядро можно не останавливать)
+  axon restore <файл>                           развернуть копию (ядро должно быть остановлено)
 
   axon plugin list                              что установлено и в каком состоянии
   axon plugin catalog                           встроенный каталог

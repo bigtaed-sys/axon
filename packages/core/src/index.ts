@@ -20,6 +20,8 @@ export { SearchIndex, INDEXED_UP_TO_SETTING } from './storage/SearchIndex.js';
 export type { SearchHit } from './storage/SearchIndex.js';
 export { SecretStore } from './storage/SecretStore.js';
 export { Store } from './storage/Store.js';
+export { createBackup, restoreBackup } from './storage/Backup.js';
+export type { BackupOptions, BackupResult, RestoreResult } from './storage/Backup.js';
 export { BlobStore } from './storage/BlobStore.js';
 export type { BlobMeta } from './storage/BlobStore.js';
 export { createRuntime } from './Runtime.js';
