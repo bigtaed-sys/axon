@@ -24,6 +24,7 @@ import {
   ConversationsRepo,
   DevicesRepo,
   FactsRepo,
+  EmbeddingsRepo,
   MessagesRepo,
   normalizeObservation,
   ObservationsRepo,
@@ -56,6 +57,7 @@ export class Store {
   readonly summaries: SummariesRepo;
   readonly facts: FactsRepo;
   readonly observations: ObservationsRepo;
+  readonly embeddings: EmbeddingsRepo;
   readonly devices: DevicesRepo;
   readonly settings: SettingsRepo;
   readonly usage: UsageRepo;
@@ -78,6 +80,7 @@ export class Store {
     this.summaries = new SummariesRepo(db);
     this.facts = new FactsRepo(db);
     this.observations = new ObservationsRepo(db);
+    this.embeddings = new EmbeddingsRepo(db);
     this.devices = new DevicesRepo(db);
     this.settings = new SettingsRepo(db);
     this.usage = new UsageRepo(db);

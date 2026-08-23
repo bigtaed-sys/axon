@@ -96,6 +96,20 @@ export interface Provider {
   readonly supportsPromptCache: boolean;
   chat(request: ChatRequest): AsyncIterable<ChatEvent>;
   listModels?(): Promise<ModelInfo[]>;
+  /**
+   * Превратить тексты в векторы.
+   *
+   * Необязательный: эмбеддинги умеют не все. У Anthropic их нет вовсе, и
+   * притворяться, что есть, нельзя — человек назначит модель и будет ждать
+   * поиска, которого не случится.
+   */
+  embed?(request: EmbedRequest): Promise<number[][]>;
+}
+
+export interface EmbedRequest {
+  model: string;
+  texts: string[];
+  signal?: AbortSignal;
 }
 
 // ─── Ошибки ─────────────────────────────────────────────────────────────────

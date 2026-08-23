@@ -276,10 +276,35 @@ CREATE UNIQUE INDEX observations_norm_idx ON observations(norm);
 CREATE INDEX observations_weight_idx ON observations(weight DESC);
 `;
 
+/**
+ * Векторы сообщений для семантического поиска.
+ *
+ * Отдельная таблица, а не колонка в `messages`, потому что это производная
+ * величина с собственной судьбой: она появляется, только если человек назначил
+ * модель, пересчитывается при её смене и удаляется целиком, если он передумал.
+ * Колонка в основной таблице означала бы, что смена модели переписывает
+ * миллион строк переписки.
+ *
+ * `model` хранится рядом с вектором: векторы разных моделей несравнимы между
+ * собой, и складывать их в одну кучу — верный способ получить бессмысленную
+ * выдачу вместо ошибки. При смене модели старое просто перестаёт учитываться.
+ */
+const EMBEDDINGS = `
+CREATE TABLE embeddings (
+  message_id TEXT    PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+  model      TEXT    NOT NULL,
+  dim        INTEGER NOT NULL,
+  vector     BLOB    NOT NULL,
+  created_at TEXT    NOT NULL
+);
+CREATE INDEX embeddings_model_idx ON embeddings(model);
+`;
+
 export const migrations: readonly Migration[] = [
   { version: 1, name: 'init', sql: INIT },
   { version: 2, name: 'plugins', sql: PLUGINS },
   { version: 3, name: 'search', sql: SEARCH },
   { version: 4, name: 'routines', sql: ROUTINES },
   { version: 5, name: 'observations', sql: OBSERVATIONS },
+  { version: 6, name: 'embeddings', sql: EMBEDDINGS },
 ];

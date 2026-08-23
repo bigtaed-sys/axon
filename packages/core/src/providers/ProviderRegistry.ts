@@ -101,6 +101,16 @@ export const VISION_MODEL_SETTING = 'vision.model';
  * несколько минут и почти всегда заканчивается словом «нет», поэтому за неё
  * разумно платить отдельной, самой дешёвой моделью.
  */
+/**
+ * Модель, превращающая переписку в векторы для поиска по смыслу.
+ *
+ * Отдельная от разговорной: эмбеддинги — другой класс моделей, у одного
+ * провайдера они называются иначе и стоят иначе. Не назначена — семантического
+ * поиска нет, полнотекстовый работает как работал.
+ */
+export const EMBEDDING_PROVIDER_SETTING = 'embedding.provider';
+export const EMBEDDING_MODEL_SETTING = 'embedding.model';
+
 export const IMPULSE_PROVIDER_SETTING = 'impulse.provider';
 export const IMPULSE_MODEL_SETTING = 'impulse.model';
 
@@ -251,6 +261,27 @@ export class ProviderRegistry {
 
     try {
       return this.resolve(id, model);
+    } catch {
+      return null;
+    }
+  }
+
+  /** Модель для векторов. `null` — не назначена или не умеет эмбеддинги. */
+  embedding(): ProviderSelection | null {
+    const id = nonEmpty(this.settings.get<string>(EMBEDDING_PROVIDER_SETTING));
+    const model = nonEmpty(this.settings.get<string>(EMBEDDING_MODEL_SETTING));
+    if (!id || !model) return null;
+
+    try {
+      const selection = this.resolve(id, model);
+      /**
+       * Провайдер без эмбеддингов — то же самое, что ненастроенный.
+       *
+       * У Anthropic их нет вовсе. Молча делать вид, что поиск работает, хуже
+       * чем честно его не иметь: человек назначит модель и будет ждать
+       * результатов, которых не появится.
+       */
+      return selection.provider.embed ? selection : null;
     } catch {
       return null;
     }

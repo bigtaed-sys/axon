@@ -375,6 +375,100 @@ export class FactsRepo {
   }
 }
 
+// ─── Векторы ────────────────────────────────────────────────────────────────
+
+export interface EmbeddingRow {
+  messageId: string;
+  conversationId: string;
+  vector: Uint8Array;
+}
+
+/**
+ * Векторы сообщений.
+ *
+ * Хранилище нарочно тупое: положить, достать всё по модели, найти
+ * необсчитанное. Вся математика — в `memory/vectors.ts`, вся политика — в
+ * `EmbeddingIndex`. Репозиторий про смысл векторов не знает.
+ */
+export class EmbeddingsRepo {
+  constructor(private readonly db: Db) {}
+
+  put(messageId: string, model: string, vector: readonly number[]): void {
+    this.db
+      .prepare(
+        `INSERT INTO embeddings (message_id, model, dim, vector, created_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(message_id) DO UPDATE SET
+           model      = excluded.model,
+           dim        = excluded.dim,
+           vector     = excluded.vector,
+           created_at = excluded.created_at`,
+      )
+      .run(messageId, model, vector.length, packVector(vector), new Date().toISOString());
+  }
+
+  /**
+   * Сообщения, которые ещё не обсчитаны этой моделью.
+   *
+   * Берём только текстовые реплики человека и агента: результаты инструментов
+   * — это выводы команд и куски файлов, искать по их смыслу бессмысленно, а
+   * платить за их векторы пришлось бы наравне со всем остальным.
+   */
+  pending(model: string, fromOrd: number, limit: number): Message[] {
+    const rows = this.db
+      .prepare(
+        `SELECT m.* FROM messages m
+         LEFT JOIN embeddings e ON e.message_id = m.id AND e.model = ?
+         WHERE m.deleted = 0
+           AND m.ord > ?
+           AND m.role IN ('user', 'assistant')
+           AND e.message_id IS NULL
+         ORDER BY m.ord ASC
+         LIMIT ?`,
+      )
+      .all(model, fromOrd, limit) as MessageRow[];
+    return rows.map(toMessage);
+  }
+
+  /** Все векторы одной модели вместе с разговором, которому они принадлежат. */
+  all(model: string): EmbeddingRow[] {
+    const rows = this.db
+      .prepare(
+        `SELECT e.message_id, e.vector, m.conversation_id
+         FROM embeddings e
+         JOIN messages m ON m.id = e.message_id AND m.deleted = 0
+         WHERE e.model = ?`,
+      )
+      .all(model) as Array<{ message_id: string; vector: Uint8Array; conversation_id: string }>;
+
+    return rows.map((row) => ({
+      messageId: row.message_id,
+      conversationId: row.conversation_id,
+      vector: row.vector,
+    }));
+  }
+
+  /** Сколько посчитано — для отчёта человеку. */
+  count(model: string): number {
+    const row = this.db
+      .prepare(`SELECT COUNT(*) AS n FROM embeddings WHERE model = ?`)
+      .get(model) as { n: number };
+    return row.n;
+  }
+
+  /** Выбросить всё: сменили модель или человек передумал. */
+  clear(): void {
+    this.db.prepare(`DELETE FROM embeddings`).run();
+  }
+}
+
+/** Вектор в байты. Копия того, что делает `memory/vectors.ts`, но без импорта
+ *  оттуда: репозитории не должны зависеть от слоя политики. */
+function packVector(vector: readonly number[]): Buffer {
+  const floats = Float32Array.from(vector);
+  return Buffer.from(floats.buffer, floats.byteOffset, floats.byteLength);
+}
+
 // ─── Наблюдения ─────────────────────────────────────────────────────────────
 
 interface ObservationRow {

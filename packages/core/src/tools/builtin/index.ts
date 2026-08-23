@@ -1,6 +1,7 @@
 import os from 'node:os';
 import type { SkillRegistry } from '../../skills/SkillRegistry.js';
 import type { Store } from '../../storage/Store.js';
+import type { EmbeddingIndex } from '../../memory/EmbeddingIndex.js';
 import type { ToolDefinition } from '../types.js';
 import { createFileTools } from './files.js';
 import { createHttpTools } from './http.js';
@@ -34,14 +35,18 @@ export const FILE_ROOTS_SETTING = 'tools.files.roots';
  * Сузить список — дело одной настройки, расширить до корня — осознанное
  * решение пользователя.
  */
-export function createBuiltinTools(store: Store, skills: SkillRegistry): ToolDefinition[] {
+export function createBuiltinTools(
+  store: Store,
+  skills: SkillRegistry,
+  embeddings?: EmbeddingIndex,
+): ToolDefinition[] {
   const roots = store.settings.get<string[]>(FILE_ROOTS_SETTING) ?? [os.homedir()];
   const guard = new PathGuard(roots);
 
   return [
     ...createMemoryTools(store),
     ...createPersonaTools(store),
-    ...createRecallTools(store),
+    ...createRecallTools(store, embeddings),
     ...createSkillTools(skills),
     ...createFileTools(guard),
     ...createShellTools(guard),

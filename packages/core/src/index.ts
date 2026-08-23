@@ -35,6 +35,9 @@ export * from './agent/index.js';
 export { decideRetry, sleep } from './agent/retry.js';
 export type { RetryDecision } from './agent/retry.js';
 export { selectFacts } from './memory/Facts.js';
+export { EmbeddingIndex, EMBEDDED_UP_TO_SETTING } from './memory/EmbeddingIndex.js';
+export type { EmbeddingDeps, SemanticHit } from './memory/EmbeddingIndex.js';
+export { fuse, pack, similarity, unpack } from './memory/vectors.js';
 export {
   effectiveWeight,
   evictionCandidates,

@@ -5,6 +5,7 @@ import {
   ProviderError,
   type ChatEvent,
   type ChatRequest,
+  type EmbedRequest,
   type ModelInfo,
   type Provider,
   type ProviderMessage,
@@ -89,6 +90,44 @@ export class OpenAICompatibleProvider implements Provider {
           ? { outputPerMTok: toNumber(m.pricing?.completion)! * 1_000_000 }
           : {}),
       }));
+  }
+
+  /**
+   * Векторы для семантического поиска.
+   *
+   * Тот же адрес и тот же ключ, что у чата: `/v1/embeddings` — часть того же
+   * OpenAI-совместимого протокола. Отдельного транспорта заводить не нужно, и
+   * Ollama с LM Studio отвечают по нему наравне с облачными.
+   *
+   * Пачкой, а не по одному: почти вся стоимость такого запроса — накладные
+   * расходы на соединение, и сотня текстов идёт примерно столько же, сколько
+   * один.
+   */
+  async embed(request: EmbedRequest): Promise<number[][]> {
+    const url = `${this.config.baseUrl.replace(/\/+$/, '')}/embeddings`;
+    const response = await this.post(
+      url,
+      { model: request.model, input: request.texts },
+      request.signal,
+    );
+
+    const body = (await response.json()) as {
+      data?: Array<{ embedding: number[]; index: number }>;
+    };
+    const rows = body.data ?? [];
+
+    if (rows.length !== request.texts.length) {
+      throw new ProviderError(
+        'upstream',
+        `Провайдер вернул ${rows.length} векторов на ${request.texts.length} текстов`,
+        { provider: this.id },
+      );
+    }
+
+    // Порядок в ответе не гарантирован — раскладываем по указанному индексу.
+    const out: number[][] = new Array(rows.length);
+    for (const row of rows) out[row.index] = row.embedding;
+    return out;
   }
 
   private headers(): Record<string, string> {

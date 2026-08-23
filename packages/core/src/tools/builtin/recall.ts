@@ -1,5 +1,8 @@
 import { z } from 'zod';
 import type { Store } from '../../storage/Store.js';
+import type { SearchHit } from '../../storage/SearchIndex.js';
+import type { EmbeddingIndex } from '../../memory/EmbeddingIndex.js';
+import { fuse } from '../../memory/vectors.js';
 import { defineTool, type ToolDefinition } from '../types.js';
 
 /**
@@ -20,7 +23,7 @@ const LIMIT = 8;
 /** Сколько сообщений вокруг найденного отдавать при чтении куска разговора. */
 const AROUND = 6;
 
-export function createRecallTools(store: Store): ToolDefinition[] {
+export function createRecallTools(store: Store, embeddings?: EmbeddingIndex): ToolDefinition[] {
   const search = defineTool({
     name: 'search_history',
     title: 'Искать по переписке',
@@ -29,8 +32,9 @@ export function createRecallTools(store: Store): ToolDefinition[] {
       'человек ссылается на сказанное — «мы это обсуждали», «как ты тогда ' +
       'предлагал», «чем кончилось с…» — и когда ответ зависит от того, о чём ' +
       'уже договорились. Ищет по словам, а не по смыслу: задавай слова, которые ' +
-      'человек скорее всего произносил, а не пересказ своими. Лучше несколько ' +
-      'коротких запросов подряд, чем один длинный.',
+      'человек скорее всего произносил. Если назначена модель поиска, ищет ещё ' +
+      'и по смыслу — тогда находится и то, что сказано другими словами. Лучше ' +
+      'несколько коротких запросов подряд, чем один длинный.',
     tier: 'safe',
     source: 'builtin',
     schema: z.object({
@@ -41,7 +45,7 @@ export function createRecallTools(store: Store): ToolDefinition[] {
         .describe('Слова для поиска. Одно-три ключевых слова работают лучше фразы'),
     }),
     async execute({ query }) {
-      const hits = store.search.search(query, LIMIT);
+      const hits = await find(store, embeddings, query);
       if (hits.length === 0) {
         return { text: `По запросу «${query}» в переписке ничего не нашлось` };
       }
@@ -154,6 +158,70 @@ export function createRecallTools(store: Store): ToolDefinition[] {
   });
 
   return [search, read, list];
+}
+
+/**
+ * Гибридный поиск: слова и смысл.
+ *
+ * Полнотекстовый идеален там, где важно точное совпадение — имя, код ошибки,
+ * название файла. Семантический находит сказанное другими словами. Порознь
+ * каждый регулярно промахивается, поэтому спрашиваем оба и сводим по рангам:
+ * то, что оба поставили высоко, почти наверняка и есть нужное.
+ *
+ * Оценки при этом не смешиваются — они несравнимы. Вес BM25 и косинусная
+ * близость живут в разных единицах, и любая попытка привести их друг к другу
+ * была бы подгонкой коэффициентов под пару удачных примеров.
+ */
+async function find(
+  store: Store,
+  embeddings: EmbeddingIndex | undefined,
+  query: string,
+): Promise<SearchHit[]> {
+  const byWords = store.search.search(query, LIMIT * 2);
+
+  // Семантики нет — работаем как раньше. Это законное состояние: модель
+  // назначают по желанию, и без неё поиск не хуже, чем был вчера.
+  if (!embeddings?.enabled) return byWords.slice(0, LIMIT);
+
+  const byMeaning = await embeddings.search(query, LIMIT * 2);
+  if (byMeaning.length === 0) return byWords.slice(0, LIMIT);
+
+  const order = fuse(
+    [byWords.map((hit) => hit.messageId), byMeaning.map((hit) => hit.messageId)],
+    LIMIT,
+  );
+
+  const known = new Map(byWords.map((hit) => [hit.messageId, hit]));
+
+  return order
+    .map((id) => known.get(id) ?? hitOf(store, id))
+    .filter((hit): hit is SearchHit => hit !== null);
+}
+
+/**
+ * Собрать попадание для того, что нашлось только по смыслу.
+ *
+ * У полнотекстового есть готовый отрывок с подсветкой, у семантического —
+ * только идентификатор: он сравнивал векторы, а не текст, и подсвечивать ему
+ * нечего. Берём начало сообщения — этого хватает, чтобы понять, о чём речь.
+ */
+function hitOf(store: Store, messageId: string): SearchHit | null {
+  const message = store.messages.get(messageId);
+  if (!message) return null;
+
+  const text = message.parts
+    .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
+    .map((part) => part.text)
+    .join(' ')
+    .trim();
+
+  return {
+    messageId: message.id,
+    conversationId: message.conversationId,
+    role: message.role,
+    createdAt: message.createdAt,
+    snippet: text.length > 300 ? `${text.slice(0, 300)}…` : text,
+  };
 }
 
 /**

@@ -5,6 +5,7 @@ import { Orchestrator, type RunSink } from './agent/Orchestrator.js';
 import { StoredPermissions, type PermissionBroker } from './agent/permissions.js';
 import { Summarizer } from './agent/Summarizer.js';
 import { Impulse } from './agent/Impulse.js';
+import { EmbeddingIndex } from './memory/EmbeddingIndex.js';
 import { Vision } from './agent/Vision.js';
 import { resolveConfig, type CoreConfig } from './config.js';
 import { logger } from './logger.js';
@@ -59,6 +60,7 @@ export interface Runtime {
   orchestrator: Orchestrator;
   scheduler: Scheduler;
   impulse: Impulse;
+  embeddings: EmbeddingIndex;
   coreId: string;
   /** Поднять плагины. Отдельно от сборки: это долго и может не получиться. */
   startPlugins(): Promise<void>;
@@ -78,7 +80,6 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   const providers = new ProviderRegistry(store.settings, store.secrets);
   const tools = new ToolRegistry(store.settings.get<string[]>(DISABLED_TOOLS_SETTING) ?? []);
   const skills = new SkillRegistry(store.settings.get<string[]>(DISABLED_SKILLS_SETTING) ?? []);
-  tools.registerAll(createBuiltinTools(store, skills));
 
   /**
    * Клиенты узнают о новых инструментах сразу, а не при переподключении.
@@ -247,6 +248,33 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
    */
   const impulse = new Impulse({ store, context, providers });
 
+  /**
+   * Векторы переписки для поиска по смыслу.
+   *
+   * Догон запускается при старте и после каждого ответа агента — отдельного
+   * расписания не нужно: новые сообщения появляются только тогда, когда идёт
+   * разговор.
+   */
+  const embeddings = new EmbeddingIndex({ store, providers });
+
+  // Инструменты регистрируем после индекса: поиску нужен он сам, а не ссылка
+  // на то, что появится позже.
+  tools.registerAll(createBuiltinTools(store, skills, embeddings));
+
+  /**
+   * Досчитывать векторы после каждого ответа.
+   *
+   * Отдельного расписания не нужно: новые сообщения появляются ровно тогда,
+   * когда идёт разговор. Слушаем журнал — тот же, что и клиенты.
+   *
+   * Догон не ждём: он ходит в сеть, а прогон уже закончился, и человек ждать
+   * не должен.
+   */
+  store.journal.subscribe((entry) => {
+    if (entry.event.type !== 'run.finished') return;
+    void embeddings.catchUp();
+  });
+
   const coreId = store.coreId();
   logger.info({ coreId, dataDir: config.dataDir }, 'ядро собрано');
 
@@ -265,6 +293,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     orchestrator,
     scheduler,
     impulse,
+    embeddings,
     coreId,
     startPlugins: async () => {
       await plugins.startAll();
@@ -273,10 +302,14 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       // получить «инструмент не найден» на первом же прогоне после старта.
       scheduler.start();
       impulse.start();
+      // Не ждём: на большой переписке первый догон идёт минутами, и держать
+      // из-за него старт ядра нельзя.
+      void embeddings.catchUp();
     },
     close: async () => {
       scheduler.stop();
       impulse.stop();
+      embeddings.stop();
       // Сначала гасим чужие процессы, потом закрываем базу: плагин, которому
       // разрешили писать факты, не должен наткнуться на закрытое соединение.
       await plugins.stopAll();

@@ -39,7 +39,7 @@ interface Page {
 
 const PAGES: Page[] = [
   { id: 'provider', label: 'Провайдер', icon: 'bi-cpu-fill' },
-  { id: 'vision', label: 'Картинки', icon: 'bi-image' },
+  { id: 'vision', label: 'Картинки и поиск', icon: 'bi-image' },
   { id: 'persona', label: 'Личность', icon: 'bi-person-badge-fill' },
   { id: 'impulse', label: 'Инициатива', icon: 'bi-send-fill' },
   { id: 'budget', label: 'Расход', icon: 'bi-coin' },
@@ -189,7 +189,12 @@ export function SettingsPanel({
       <div className="flex-1 overflow-y-auto scrollbar">
         <div className="max-w-2xl px-6 py-6 space-y-4">
           {page === 'provider' && <ProviderPage {...shared} />}
-          {page === 'vision' && <VisionPage {...shared} />}
+          {page === 'vision' && (
+            <>
+              <VisionPage {...shared} />
+              <SearchModelSection {...shared} />
+            </>
+          )}
           {page === 'persona' && <PersonaPage {...shared} />}
           {page === 'impulse' && <ImpulsePage {...shared} />}
           {page === 'telegram' && <TelegramPage {...shared} client={client} />}
@@ -513,6 +518,70 @@ function Choice<T extends string>({
         ))}
       </div>
     </Field>
+  );
+}
+
+/**
+ * Модель для поиска по смыслу.
+ *
+ * Отдельная от разговорной: эмбеддинги — другой класс моделей, у одного
+ * провайдера они называются иначе и стоят иначе.
+ */
+function SearchModelSection({ values, providers, save }: PageProps) {
+  const provider = String(values['embedding.provider'] ?? '');
+  const model = String(values['embedding.model'] ?? '');
+  const on = Boolean(provider && model);
+
+  return (
+    <Section
+      title="Поиск по смыслу"
+      icon="bi-search-heart"
+      hint="Полнотекстовый поиск находит слово, семантический — мысль: «переезд» по запросу «сменил квартиру». Работают вместе, и то, что нашли оба, показывается первым."
+    >
+      <Field
+        label="Провайдер"
+        hint="Anthropic эмбеддинги не отдаёт вовсе. Ollama и LM Studio считают их у вас на машине — бесплатно и без ключа."
+      >
+        <select
+          value={provider}
+          onChange={(e) => void save({ 'embedding.provider': e.target.value || null })}
+          className="input"
+        >
+          <option value="">не назначен — только поиск по словам</option>
+          {providers.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.title}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      {provider && (
+        <Field
+          label="Модель"
+          hint="Например: nomic-embed-text для Ollama, text-embedding-3-small для OpenAI."
+        >
+          <input
+            className="input"
+            defaultValue={model}
+            placeholder="имя модели эмбеддингов"
+            onBlur={(e) => void save({ 'embedding.model': e.target.value.trim() || null })}
+          />
+        </Field>
+      )}
+
+      {on ? (
+        <p className="text-[11px] text-text-dim leading-relaxed">
+          Переписка обсчитывается фоном, порциями — сразу после каждого ответа и при запуске
+          ядра. Смените модель, и всё посчитается заново: векторы разных моделей несравнимы.
+        </p>
+      ) : (
+        <p className="text-[11px] text-text-dim leading-relaxed">
+          Пока модель не назначена, поиск остаётся полнотекстовым. Это законное состояние: у
+          облачных провайдеров векторы стоят денег, и включать это за вас нельзя.
+        </p>
+      )}
+    </Section>
   );
 }
 
