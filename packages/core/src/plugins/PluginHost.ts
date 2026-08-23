@@ -14,7 +14,7 @@ import type { Store } from '../storage/Store.js';
 import type { PluginRow } from '../storage/repos.js';
 import type { ToolRegistry } from '../tools/ToolRegistry.js';
 import { DISABLED_SKILLS_SETTING, type SkillRegistry } from '../skills/SkillRegistry.js';
-import { CATALOG } from './catalog.js';
+import { CatalogSource, type CatalogResult } from './CatalogSource.js';
 import { install, installFromArchive } from './install.js';
 import { LoadedPlugin, settingKey } from './LoadedPlugin.js';
 import { readManifest } from './manifest.js';
@@ -57,16 +57,24 @@ export class PluginHost {
   private readonly log = logger.child({ module: 'plugins' });
   readonly pluginsDir: string;
   readonly pluginDataDir: string;
+  private readonly catalogSource: CatalogSource;
 
   constructor(private readonly options: PluginHostOptions) {
     this.pluginsDir = path.join(options.dataDir, 'plugins');
     this.pluginDataDir = path.join(options.dataDir, 'plugin-data');
+    this.catalogSource = new CatalogSource(options.store, options.dataDir);
   }
 
   // ─── Чтение ───────────────────────────────────────────────────────────────
 
-  catalog(): readonly CatalogEntry[] {
-    return CATALOG;
+  /**
+   * Каталог: сеть, кэш или сборка — в таком порядке.
+   *
+   * Асинхронный, потому что в сеть ходит. Раньше это была константа, и
+   * добавить плагин в каталог означало выпустить новую версию ядра.
+   */
+  catalog(refresh = false): Promise<CatalogResult> {
+    return this.catalogSource.get(refresh);
   }
 
   list(): PluginInfo[] {

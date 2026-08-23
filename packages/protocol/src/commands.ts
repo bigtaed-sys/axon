@@ -173,7 +173,23 @@ export const zProviderListRes = z.object({ providers: z.array(zProviderInfo) });
 // ─── Плагины ────────────────────────────────────────────────────────────────
 
 export const zPluginListRes = z.object({ plugins: z.array(zPluginInfo) });
-export const zPluginCatalogRes = z.object({ entries: z.array(zCatalogEntry) });
+export const zPluginCatalogReq = z.object({
+  /** Человек нажал «обновить» — идти в сеть, не глядя на свежесть кэша. */
+  refresh: z.boolean().default(false),
+});
+
+export const zPluginCatalogRes = z.object({
+  entries: z.array(zCatalogEntry),
+  /**
+   * Откуда взялся этот список.
+   *
+   * Показывается человеку: каталог из сборки полугодовой давности и свежий
+   * выглядят одинаково, и без пометки непонятно, почему в нём нет того, что
+   * ему обещали.
+   */
+  origin: z.enum(['network', 'cache', 'bundled']),
+  fetchedAt: zTimestamp.optional(),
+});
 
 export const zPluginInstallReq = z.object({ source: zPluginSource });
 export const zPluginInstallRes = z.object({ plugin: zPluginInfo });
@@ -349,7 +365,7 @@ export const commands = {
   'routine.runs': { req: zRoutineRunsReq, res: zRoutineRunsRes },
 
   'plugin.list': { req: z.object({}), res: zPluginListRes },
-  'plugin.catalog': { req: z.object({}), res: zPluginCatalogRes },
+  'plugin.catalog': { req: zPluginCatalogReq, res: zPluginCatalogRes },
   'plugin.install': { req: zPluginInstallReq, res: zPluginInstallRes },
   'plugin.remove': { req: zPluginIdReq, res: zOkRes },
   'plugin.setEnabled': { req: zPluginSetEnabledReq, res: zOkRes },

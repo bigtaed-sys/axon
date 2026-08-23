@@ -231,10 +231,29 @@ async function plugin(args: string[]): Promise<void> {
         return;
       }
       case 'catalog': {
-        for (const entry of runtime.plugins.catalog()) {
+        const catalog = await runtime.plugins.catalog(args[1] === '--refresh');
+
+        for (const entry of catalog.entries) {
           console.log(`${entry.id}\t${entry.name}`);
           console.log(`  ${entry.description}`);
         }
+
+        /**
+         * Откуда список — важно сказать.
+         *
+         * Каталог из сборки полугодовой давности и свежий выглядят одинаково,
+         * и без пометки непонятно, почему в нём нет того, о чём человеку
+         * рассказали.
+         */
+        const where =
+          catalog.origin === 'network'
+            ? 'из репозитория каталога'
+            : catalog.origin === 'cache'
+              ? 'из кэша — сеть недоступна'
+              : 'из сборки — сеть и кэш недоступны';
+
+        console.log('');
+        console.log(`  ${catalog.entries.length} записей, ${where}`);
         return;
       }
       case 'add': {
@@ -413,7 +432,7 @@ function usage(): void {
 
   axon plugin new <папка> [id]                  заготовка своего плагина
   axon plugin list                              что установлено и в каком состоянии
-  axon plugin catalog                           встроенный каталог
+  axon plugin catalog [--refresh]               каталог плагинов, --refresh тянет свежий
   axon plugin add <id|git-url>                  поставить из каталога или из репозитория
   axon plugin add-mcp [файл.json]               свой MCP-сервер (конфиг из его README, или stdin)
   axon plugin link <папка>                      подключить папку как есть (разработка)

@@ -148,18 +148,23 @@ function AddDialog({
   const [text, setText] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
-  const [catalog, setCatalog] = useState<CatalogEntry[] | null>(null);
+  const [catalog, setCatalog] = useState<CatalogAnswer | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [setup, setSetup] = useState<CatalogEntry | null>(null);
 
-  useEffect(() => {
+  const loadCatalog = (refresh = false): void => {
+    if (refresh) setRefreshing(true);
     void client
-      .call('plugin.catalog', {})
+      .call('plugin.catalog', { refresh })
       // Отличать «каталог пуст» от «каталог не приехал» обязательно: иначе
       // старое ядро, не знающее про плагины, выглядит как ядро без каталога,
       // и человек ищет проблему не там.
-      .then((res) => setCatalog(res.entries))
-      .catch(() => setCatalog(null));
-  }, []);
+      .then((res) => setCatalog(res))
+      .catch(() => setCatalog(null))
+      .finally(() => setRefreshing(false));
+  };
+
+  useEffect(() => loadCatalog(), []);
 
   const run = async (label: string, action: () => Promise<unknown>): Promise<void> => {
     setBusy(label);
@@ -209,7 +214,7 @@ function AddDialog({
     });
   };
 
-  const available = (catalog ?? []).filter((entry) => !installed.has(entry.id));
+  const available = (catalog?.entries ?? []).filter((entry) => !installed.has(entry.id));
 
   return (
     <div
@@ -280,10 +285,21 @@ function AddDialog({
           </section>
 
           <section>
-            <h4 className="text-[13px] font-semibold">Каталог</h4>
+            <div className="flex items-center gap-2">
+              <h4 className="text-[13px] font-semibold flex-1">Каталог</h4>
+              <button
+                type="button"
+                disabled={refreshing}
+                onClick={() => loadCatalog(true)}
+                className="h-7 px-2.5 rounded-lg border border-border text-[11px] text-text-muted hover:border-border-strong hover:text-text disabled:opacity-40 transition-colors"
+              >
+                {refreshing ? 'Обновляю…' : 'Обновить'}
+              </button>
+            </div>
             <p className="mt-1 mb-2.5 text-[11px] text-text-dim leading-relaxed">
-              Проверенные плагины. Список едет вместе с ядром, поэтому работает и без интернета —
-              но это закладки, а не граница возможного.
+              Проверенные плагины. Список обновляется отдельно от приложения — добавить в него
+              плагин можно, не выпуская новую версию ядра. Это закладки, а не граница возможного.
+              {catalog && ` ${origin(catalog)}`}
             </p>
 
             {catalog === null ? (
@@ -369,6 +385,29 @@ function AddDialog({
       )}
     </div>
   );
+}
+
+type CatalogAnswer = {
+  entries: CatalogEntry[];
+  origin: 'network' | 'cache' | 'bundled';
+  fetchedAt?: string | undefined;
+};
+
+/**
+ * Откуда взялся список.
+ *
+ * Каталог из сборки полугодовой давности и свежий выглядят одинаково, и без
+ * пометки непонятно, почему в нём нет того, о чём человеку рассказали.
+ */
+function origin(catalog: CatalogAnswer): string {
+  if (catalog.origin === 'network') return 'Свежий.';
+  if (catalog.origin === 'cache') {
+    const when = catalog.fetchedAt
+      ? new Date(catalog.fetchedAt).toLocaleDateString('ru-RU')
+      : 'когда-то';
+    return `Сеть недоступна — показан сохранённый от ${when}.`;
+  }
+  return 'Сеть и кэш недоступны — показан список из сборки.';
 }
 
 const PLACEHOLDER = `https://github.com/автор/axon-plugin-…

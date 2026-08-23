@@ -310,7 +310,7 @@ const handlers: Handlers = {
 
   // ─── Плагины ──
   'plugin.list': (_req, { runtime }) => ({ plugins: runtime.plugins.list() }),
-  'plugin.catalog': (_req, { runtime }) => ({ entries: [...runtime.plugins.catalog()] }),
+  'plugin.catalog': async (req, { runtime }) => await runtime.plugins.catalog(req.refresh),
 
   'plugin.install': async (req, { runtime }) => {
     try {
