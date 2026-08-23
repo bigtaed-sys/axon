@@ -1,11 +1,21 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, shell } from 'electron';
 import * as autostart from './autostart.js';
 import { ConnectionManager, type Connection } from './connection.js';
 import { policy } from './csp.js';
 
 const here = __dirname;
+
+/**
+ * `standard` — чтобы работали относительные пути и origin (без него `'self'` в
+ * политике не значит ничего), `secure` — чтобы страница считалась защищённой:
+ * иначе Chromium запретит ей часть возможностей как обычному http.
+ */
+const RENDERER_SCHEME = 'axon';
+protocol.registerSchemesAsPrivileged([
+  { scheme: RENDERER_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } },
+]);
 
 let window: BrowserWindow | null = null;
 let connections: ConnectionManager | null = null;
@@ -122,16 +132,27 @@ const MIME: Record<string, string> = {
 };
 
 /**
- * Отдавать рендерер самим, чтобы поставить заголовок с политикой.
+ * Своя схема для рендерера: `axon://app/index.html` вместо `file://`.
  *
- * Политика зависит от того, к какому ядру мы подключены, а зависящей от чего
- * бы то ни было `<meta>` в статическом index.html быть не может: она читается
- * при разборе документа. Заголовок же собирается в момент запроса — когда
- * адрес ядра уже известен.
+ * Нужна ради политики безопасности. Политика зависит от того, к какому ядру мы
+ * подключены, а `<meta>` в статическом index.html зависеть ни от чего не
+ * может: она читается при разборе документа. Значит, политика должна приехать
+ * заголовком — а заголовков у `file://` нет вовсе.
+ *
+ * Своя схема, а не перехват `file://`: подменять его целиком значит брать на
+ * себя всё, что Chromium делает с локальными файлами — докачку по диапазонам,
+ * кэширование, внутренние загрузки. Здесь же ровно один каталог со сборкой.
  */
 function serveRenderer(): void {
-  protocol.handle('file', async (request) => {
-    const file = decodeURIComponent(new URL(request.url).pathname).replace(/^\/([A-Za-z]:)/, '$1');
+  const root = path.join(here, '../renderer');
+
+  protocol.handle(RENDERER_SCHEME, async (request) => {
+    const { pathname } = new URL(request.url);
+    const file = path.join(root, pathname === '/' ? 'index.html' : decodeURIComponent(pathname));
+
+    // Ссылка приходит из нашей же страницы, но проверка стоит трёх строк:
+    // `..` в пути превратил бы окно в файловый менеджер.
+    if (!file.startsWith(root)) return new Response('нельзя', { status: 403 });
 
     let data: Buffer;
     try {
@@ -146,19 +167,6 @@ function serveRenderer(): void {
       headers['Content-Security-Policy'] = policy(connections?.connection?.url ?? null);
     }
     return new Response(new Uint8Array(data), { headers });
-  });
-
-  // В разработке рендерер отдаёт Vite по http — там свой заголовок и свой
-  // путь; без этого политика в разработке отличалась бы от рабочей, и
-  // нарушения находились бы у пользователя, а не у нас.
-  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    if (details.resourceType !== 'mainFrame') return callback({});
-    callback({
-      responseHeaders: {
-        ...details.responseHeaders,
-        'Content-Security-Policy': [policy(connections?.connection?.url ?? null)],
-      },
-    });
   });
 }
 
@@ -187,6 +195,19 @@ function createWindow(): void {
 
   window.once('ready-to-show', () => window?.show());
 
+  /**
+   * Упавший рендерер — это чёрное окно или его отсутствие, и больше ничего.
+   * Без записи в файл про такое можно только гадать: главный процесс жив,
+   * ошибок не печатает, а приложения нет.
+   */
+  window.webContents.on('render-process-gone', (_event, details) => {
+    logStartupFailure('рендерер', new Error(`${details.reason}, код ${details.exitCode ?? '—'}`));
+  });
+  window.webContents.on('did-fail-load', (_event, code, description, url) => {
+    if (code === -3) return; // отменённая загрузка — не отказ
+    logStartupFailure('загрузка окна', new Error(`${description} (${code}) ${url}`));
+  });
+
   // Внешние ссылки — в браузер: окно приложения не должно уезжать на сайт.
   window.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);
@@ -195,9 +216,12 @@ function createWindow(): void {
 
   const devServer = process.env['AXON_DEV_SERVER'];
   if (devServer) {
+    // В разработке страницу отдаёт Vite по http, и политики на ней нет: строгая
+    // ломает горячую перезагрузку, которая живёт на встроенном скрипте. Electron
+    // об этом честно ругается в консоли — в собранном приложении политика есть.
     void window.loadURL(devServer);
   } else {
-    void window.loadFile(path.join(here, '../renderer/index.html'));
+    void window.loadURL(`${RENDERER_SCHEME}://app/index.html`);
   }
 }
 
