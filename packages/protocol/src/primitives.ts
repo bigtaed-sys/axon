@@ -18,7 +18,7 @@ export const PROTOCOL_VERSION = 1;
  * Поднимать при каждом расширении контракта — новой команде, новом поле в
  * ответе, новом типе события.
  */
-export const PROTOCOL_REVISION = 8;
+export const PROTOCOL_REVISION = 9;
 
 /** Единственный формат времени на проводе — ISO-8601 в UTC. Никаких unix-миллисекунд вперемешку. */
 export const zTimestamp = z.string().datetime();

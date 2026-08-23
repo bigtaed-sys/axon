@@ -471,6 +471,18 @@ export class AxonClient {
       return;
     }
 
+    /**
+     * Набор инструментов меняется, когда поднимаются и падают плагины, — то
+     * есть тоже вне всякого прогона. Список заменяем целиком: он приходит
+     * целиком, и сливать его по частям не с чем.
+     */
+    if (signal.type === 'tools.changed') {
+      this.state.tools.clear();
+      for (const tool of signal.tools) this.state.tools.set(tool.name, tool);
+      this.state.notify();
+      return;
+    }
+
     const stream = this.state.streams.get(signal.runId);
     // Сигнал по прогону, о котором мы ещё не знаем: догон не закончился либо
     // прогон стартовал до подключения. Терять не жалко — это эфемерика.

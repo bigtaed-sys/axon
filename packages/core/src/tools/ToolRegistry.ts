@@ -34,6 +34,7 @@ export interface SelectOptions {
  */
 export class ToolRegistry {
   private readonly tools = new Map<string, ToolDefinition>();
+  private readonly listeners = new Set<() => void>();
   private readonly disabled: Set<string>;
   /** JSON Schema считается один раз: zodToJsonSchema заметно не бесплатен. */
   private readonly schemaCache = new Map<string, Record<string, unknown>>();
@@ -56,6 +57,7 @@ export class ToolRegistry {
       throw new Error(`Инструмент ${tool.name} уже зарегистрирован`);
     }
     this.tools.set(tool.name, tool);
+    this.announce();
   }
 
   registerAll(tools: readonly ToolDefinition[]): void {
@@ -66,6 +68,7 @@ export class ToolRegistry {
   unregister(name: string): void {
     this.tools.delete(name);
     this.schemaCache.delete(name);
+    this.announce();
   }
 
   get(name: string): ToolDefinition | null {
@@ -97,6 +100,22 @@ export class ToolRegistry {
   }
 
   /** Полный список для интерфейса — включая выключенные. */
+  /**
+   * Кому сказать, что набор изменился.
+   *
+   * Реестр живёт в памяти и меняется, когда плагины поднимаются и падают.
+   * Раньше об этом не узнавал никто: клиент видел инструменты плагина только
+   * после переподключения, потому что брал их из снапшота.
+   */
+  onChange(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  private announce(): void {
+    for (const listener of this.listeners) listener();
+  }
+
   list(): ToolInfo[] {
     return this.sorted().map((tool) => ({
       name: tool.name,

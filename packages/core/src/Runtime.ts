@@ -80,6 +80,25 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   const skills = new SkillRegistry(store.settings.get<string[]>(DISABLED_SKILLS_SETTING) ?? []);
   tools.registerAll(createBuiltinTools(store, skills));
 
+  /**
+   * Клиенты узнают о новых инструментах сразу, а не при переподключении.
+   *
+   * Плагин поднимается через секунды после старта ядра и приносит свои
+   * инструменты — до этого список у клиента брался только из снапшота, и
+   * человек видел их лишь перезапустив приложение.
+   *
+   * Пачкой в конце тика, а не на каждую регистрацию: плагин с десятком
+   * инструментов иначе разослал бы десять одинаковых списков подряд.
+   */
+  let announcing: NodeJS.Immediate | null = null;
+  tools.onChange(() => {
+    if (announcing) return;
+    announcing = setImmediate(() => {
+      announcing = null;
+      (options.sink ?? NOOP_SINK).emit({ type: 'tools.changed', tools: tools.list() });
+    });
+  });
+
   const executor = new ToolExecutor(tools, new StoredPermissions(store));
   const context = new ContextBuilder(store, { blobs });
 

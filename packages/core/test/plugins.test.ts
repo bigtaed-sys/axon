@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import { parseMcpConfig } from '@axon/protocol';
 import { createRuntime, type Runtime } from '../src/index.js';
 import type { ToolContext } from '../src/tools/types.js';
@@ -378,5 +379,76 @@ describe('каталог', () => {
     await expect(
       runtime.plugins.install({ type: 'catalog', id: 'github', values: {} }),
     ).rejects.toThrow(/Не заполнено/);
+  });
+});
+
+describe('список инструментов у клиентов', () => {
+  it('меняется сигналом, а не только в снапшоте', async () => {
+    // Плагин поднимается через секунды после старта ядра. Пока об изменении
+    // никто не сообщал, человек видел его инструменты лишь после перезапуска
+    // приложения — снапшот берётся один раз, при подключении.
+    const seen: number[] = [];
+    const runtime = createRuntime({
+      config: { dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'axon-toolsig-')) },
+      sink: {
+        emit: (signal) => {
+          if (signal.type === 'tools.changed') seen.push(signal.tools.length);
+        },
+      },
+    });
+
+    try {
+      const before = runtime.tools.list().length;
+      seen.length = 0;
+
+      runtime.tools.register({
+        name: 'проба',
+        title: 'Проба',
+        description: 'Появилась на лету',
+        tier: 'safe',
+        source: 'plugin:проба',
+        schema: z.object({}),
+        execute: async () => ({ text: 'ок' }),
+      });
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(seen).toEqual([before + 1]);
+      expect(seen[0]).toBe(runtime.tools.list().length);
+    } finally {
+      await runtime.close();
+    }
+  });
+
+  it('десяток инструментов подряд — один сигнал, а не десять', async () => {
+    const seen: number[] = [];
+    const runtime = createRuntime({
+      config: { dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'axon-toolsig2-')) },
+      sink: {
+        emit: (signal) => {
+          if (signal.type === 'tools.changed') seen.push(signal.tools.length);
+        },
+      },
+    });
+
+    try {
+      seen.length = 0;
+      for (let i = 0; i < 10; i += 1) {
+        runtime.tools.register({
+          name: `проба${i}`,
+          title: 'Проба',
+          description: 'Одна из многих',
+          tier: 'safe',
+          source: 'plugin:проба',
+          schema: z.object({}),
+          execute: async () => ({ text: 'ок' }),
+        });
+      }
+
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(seen).toHaveLength(1);
+    } finally {
+      await runtime.close();
+    }
   });
 });
