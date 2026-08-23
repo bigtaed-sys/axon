@@ -37,6 +37,7 @@ export function Screen({
   icon,
   hint,
   width = 'reading',
+  tabs,
   actions,
   children,
 }: {
@@ -44,6 +45,14 @@ export function Screen({
   icon: string;
   hint?: string;
   width?: ScreenWidth;
+  /**
+   * Разделы одного экрана — по центру, между названием и кнопками.
+   *
+   * Не слева и не справа: слева переключатель читается как продолжение
+   * заголовка, справа — как ещё одна кнопка действия. Посередине он ничем
+   * другим быть не может.
+   */
+  tabs?: React.ReactNode;
   /** Что поставить справа от заголовка: поиск, переключатель вида. */
   actions?: React.ReactNode;
   children: React.ReactNode;
@@ -54,7 +63,10 @@ export function Screen({
         <div className="flex items-center gap-2.5 mb-1">
           <i className={clsx('bi', icon, 'text-lg text-accent')} />
           <h2 className="text-[17px] font-semibold tracking-tight">{title}</h2>
-          {actions && <div className="ml-auto flex items-center gap-2">{actions}</div>}
+          {tabs && <div className="flex-1 flex justify-center">{tabs}</div>}
+          {actions && (
+            <div className={clsx('flex items-center gap-2', !tabs && 'ml-auto')}>{actions}</div>
+          )}
         </div>
         {hint && (
           <p className="text-[12px] text-text-muted mb-5 leading-relaxed max-w-2xl">{hint}</p>
