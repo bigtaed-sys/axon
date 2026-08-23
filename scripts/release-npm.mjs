@@ -21,6 +21,16 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PACKAGES = ['packages/plugin-sdk', 'packages/daemon'];
 
 const dryRun = process.argv.includes('--dry-run');
+
+/**
+ * Всё остальное уходит в npm как есть — прежде всего `--otp=123456`.
+ *
+ * При включённой двухфакторной защите npm спрашивает код в терминале, а
+ * запущенный из скрипта publish спросить его не может: ввода нет, и
+ * публикация падает с 403.
+ */
+const passThrough = process.argv.slice(2).filter((arg) => arg !== '--dry-run');
+
 const version = resolveVersion();
 
 // `2026.8.23-27-g8c24498` — это сборка из середины работы, а не релиз.
@@ -41,13 +51,28 @@ for (const dir of PACKAGES) {
 
   console.log(`── ${pkg.name}`);
 
+  // Уже в реестре — например, второй пакет упал на коде двухфакторной защиты,
+  // и скрипт запускают заново. Повторная публикация той же версии всё равно
+  // невозможна, и падать на ней вместо того, чтобы доделать остальное, глупо.
+  if (!dryRun && published(pkg.name, version)) {
+    console.log(`${version} уже в реестре, пропускаю\n`);
+    continue;
+  }
+
   fs.writeFileSync(file, original.replace(/"version": "[^"]*"/, `"version": "${version}"`), 'utf8');
   try {
-    execFileSync('npm', dryRun ? ['publish', '--dry-run'] : ['publish'], {
+    execFileSync('npm', ['publish', ...(dryRun ? ['--dry-run'] : []), ...passThrough], {
       cwd: path.join(root, dir),
       stdio: 'inherit',
       shell: process.platform === 'win32',
     });
+  } catch {
+    // Стек вызовов node здесь не нужен: npm уже напечатал, что не так, и
+    // ошибка не в этом скрипте.
+    console.error(`\n${pkg.name} не опубликован.`);
+    console.error('Если npm просит код двухфакторной защиты: npm run release:npm -- --otp=123456');
+    process.exitCode = 1;
+    break;
   } finally {
     // Возвращаем заглушку в любом случае: упавшая публикация не должна
     // оставлять в репозитории версию, которой там не место.
@@ -55,4 +80,18 @@ for (const dir of PACKAGES) {
   }
 }
 
-console.log('\nГотово.');
+if (!process.exitCode) console.log('\nГотово.');
+
+/** Есть ли такая версия в реестре. Нет пакета вовсе — тоже «нет». */
+function published(name, wanted) {
+  try {
+    const answer = execFileSync('npm', ['view', `${name}@${wanted}`, 'version'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      shell: process.platform === 'win32',
+    });
+    return answer.trim() === wanted;
+  } catch {
+    return false;
+  }
+}

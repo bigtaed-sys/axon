@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createBackup, createRuntime, resolveConfig, restoreBackup, scaffold } from '@axon/core';
 import { parseMcpConfig } from '@axon/protocol';
-import { Daemon } from './Daemon.js';
+import { Daemon, DAEMON_VERSION } from './Daemon.js';
 
 interface CoreRecord {
   url: string;
@@ -56,6 +56,12 @@ async function main(): Promise<void> {
     case '--help':
     case '-h':
       return usage();
+    // Первое, что набирают после установки, — и первое, что спрашивают, когда
+    // что-то не работает. Отвечать на это списком команд невежливо.
+    case 'version':
+    case '--version':
+    case '-v':
+      return console.log(DAEMON_VERSION);
     default:
       console.error(`Неизвестная команда: ${command}\n`);
       usage();
@@ -439,6 +445,8 @@ function usage(): void {
   axon plugin update <id>                       подтянуть новую версию из репозитория
   axon plugin remove <id>                       удалить
   axon plugin logs <id>                         последние строки вывода плагина
+
+  axon version                                  версия ядра
 
 Папка данных задаётся переменной AXON_DATA_DIR.`);
 }
