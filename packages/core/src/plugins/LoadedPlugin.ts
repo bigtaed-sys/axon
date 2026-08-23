@@ -2,9 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import type { ProviderMessage } from '../providers/types.js';
 import type {
   Fact,
   JournalEntry,
+  Usage,
   PluginInfo,
   PluginManifest,
   PluginOrigin,
@@ -24,6 +26,10 @@ import {
   TO_CORE,
   TO_PLUGIN,
   type AddSkillParams,
+  type AskParams,
+  type NotifyParams,
+  type SearchHistoryParams,
+  type SetStatusParams,
   type LogParams,
   type ProviderChatParams,
   type RegisterContributorParams,
@@ -76,6 +82,15 @@ export class LoadedPlugin {
 
   private status: PluginStatus = 'disabled';
   private error: string | undefined;
+  /**
+   * Что плагин сам сказал о себе.
+   *
+   * Отдельно от `error`: тот про поломку ядра — процесс упал, манифест кривой.
+   * Пометка — про внешний мир, о котором знает только плагин: сервер не
+   * отвечает, токен протух, квота кончилась.
+   */
+  private note: string | null = null;
+  private noteIsFailure = false;
 
   constructor(
     readonly id: string,
@@ -109,8 +124,14 @@ export class LoadedPlugin {
       actions: this.manifest.actions,
       settingValues: this.publicSettings(),
       enabled: this.enabled,
-      status: this.status,
-      ...(this.error ? { error: this.error } : {}),
+      /**
+       * Пометка плагина перебивает вычисленное состояние.
+       *
+       * Процесс жив, но плагин говорит, что дела плохи, — значит плохи: он
+       * единственный, кто видит свой внешний сервер.
+       */
+      status: this.note && this.noteIsFailure ? 'failed' : this.status,
+      ...(this.error ? { error: this.error } : this.note ? { error: this.note } : {}),
       // Свои инструменты и инструменты MCP-серверов — один список: для
       // пользователя это всё «что умеет этот плагин», и делить их по способу
       // появления значит перекладывать нашу внутреннюю кухню на него.
@@ -521,6 +542,97 @@ export class LoadedPlugin {
     child.handle(TO_CORE.upsertFact, (params: { key: string; value: string }) => {
       this.deps.store.upsertFact(params.key, params.value, 'inferred');
       return null;
+    });
+
+    /**
+     * Спросить модель от имени плагина.
+     *
+     * Ключ и выбор модели берутся у ядра — плагину не приходится заводить
+     * свой, а расход попадает в общий учёт. Иначе автор плагина просил бы у
+     * человека второй ключ, и деньги уходили бы мимо счётчика.
+     *
+     * Без истории и без инструментов: это один вопрос, а не агент. Плагину,
+     * которому нужен агент, незачем быть плагином.
+     */
+    child.handle(TO_CORE.ask, async (params: AskParams): Promise<string> => {
+      const { provider, model } = this.deps.providers.current();
+
+      const messages: ProviderMessage[] = [];
+      if (params.system) {
+        messages.push({ role: 'system', parts: [{ type: 'text', text: params.system }] });
+      }
+      messages.push({ role: 'user', parts: [{ type: 'text', text: params.prompt }] });
+
+      let text = '';
+      let spent: Usage | null = null;
+
+      for await (const event of provider.chat({
+        model,
+        messages,
+        maxTokens: params.maxTokens ?? 1_000,
+      })) {
+        if (event.type === 'text') text += event.delta;
+        else if (event.type === 'usage') spent = event.usage;
+      }
+
+      /**
+       * Расход записываем на разговор, которого нет.
+       *
+       * Плагин спрашивает вне всякой переписки, но деньги потрачены
+       * настоящие, и не показать их значило бы врать в отчёте о расходе.
+       */
+      if (spent) {
+        this.deps.store.usage.record({
+          runId: `plugin:${this.manifest.id}`,
+          conversationId: `plugin:${this.manifest.id}`,
+          usage: spent,
+          at: new Date().toISOString(),
+        });
+      }
+
+      return text.trim();
+    });
+
+    /**
+     * Уведомление от плагина.
+     *
+     * Тем же событием, что и у рутин: показать его должен клиент, который
+     * сейчас на связи, а у ядра экрана нет. Заводить для плагинов отдельный
+     * канал значило бы иметь два пути к одному и тому же уведомлению.
+     */
+    child.handle(TO_CORE.notify, (params: NotifyParams) => {
+      this.deps.store.transact(() => {
+        this.deps.store.record({
+          type: 'routine.notified',
+          routineId: `plugin:${this.manifest.id}`,
+          title: params.title,
+          ...(params.body ? { body: params.body } : {}),
+        });
+      });
+      return null;
+    });
+
+    /**
+     * Плагин сам говорит, как у него дела.
+     *
+     * До этого состояние выводилось из состояния процесса: жив — значит
+     * работает. Плагин, у которого отвалился внешний сервер, при этом живее
+     * всех живых и молчит, а человек гадает, почему инструмент не отвечает.
+     */
+    child.handle(TO_CORE.setStatus, (params: SetStatusParams) => {
+      this.note = params.note?.trim() || null;
+      this.noteIsFailure = Boolean(params.failed);
+      this.deps.onStatus(this);
+      return null;
+    });
+
+    child.handle(TO_CORE.searchHistory, (params: SearchHistoryParams) => {
+      return this.deps.store.search.search(params.query, params.limit ?? 10).map((hit) => ({
+        messageId: hit.messageId,
+        conversationId: hit.conversationId,
+        role: hit.role,
+        snippet: hit.snippet,
+      }));
     });
 
     child.handle(TO_CORE.writeBlob, async (params: WriteBlobParams) => {

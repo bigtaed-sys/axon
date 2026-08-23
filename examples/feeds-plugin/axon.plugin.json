@@ -6,7 +6,9 @@
   "author": "Axon",
   "api": 1,
   "main": "./index.js",
-  "permissions": ["net"],
+  "permissions": [
+    "net"
+  ],
   "settings": [
     {
       "key": "urls",
@@ -34,19 +36,36 @@
       "label": "Сколько заголовков показывать агенту",
       "type": "number",
       "default": 5,
-      "visibleWhen": { "key": "inPrompt", "equals": true }
+      "visibleWhen": {
+        "key": "inPrompt",
+        "equals": true
+      }
+    },
+    {
+      "key": "notify",
+      "label": "Сообщать о новом",
+      "description": "Уведомление раз в час, когда в лентах появилось что-то новое.",
+      "type": "boolean",
+      "default": false
     }
   ],
   "sections": [
     {
       "title": "Ленты",
       "description": "Обновляются раз в час. Кнопкой ниже можно проверить прямо сейчас — заодно видно, какие адреса отвечают.",
-      "fields": ["urls", "limit"]
+      "fields": [
+        "urls",
+        "limit"
+      ]
     },
     {
       "title": "В разговоре",
       "description": "Заголовки в промпте стоят токенов на каждом ходу. Включайте, если следите за лентами постоянно; иначе агенту хватит инструмента.",
-      "fields": ["inPrompt", "promptCount"]
+      "fields": [
+        "inPrompt",
+        "promptCount",
+        "notify"
+      ]
     }
   ],
   "actions": [
@@ -63,5 +82,11 @@
       "confirm": "Удалить все сохранённые заголовки?"
     }
   ],
-  "jobs": [{ "name": "обновление", "everySeconds": 3600, "immediate": true }]
+  "jobs": [
+    {
+      "name": "обновление",
+      "everySeconds": 3600,
+      "immediate": true
+    }
+  ]
 }

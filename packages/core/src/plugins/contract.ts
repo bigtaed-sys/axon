@@ -147,6 +147,10 @@ export const TO_CORE = {
   listFacts: 'fact.list',
   upsertFact: 'fact.upsert',
   writeBlob: 'blob.write',
+  ask: 'model.ask',
+  notify: 'notify',
+  setStatus: 'status.set',
+  searchHistory: 'history.search',
   log: 'log',
 } as const;
 
@@ -155,6 +159,28 @@ export const TO_CORE = {
  * знает, жив ли процесс вообще: `fork` возвращает объект и в том случае, когда
  * модуль падает на импорте.
  */
+export interface AskParams {
+  prompt: string;
+  system?: string;
+  maxTokens?: number;
+}
+
+export interface NotifyParams {
+  title: string;
+  body?: string;
+}
+
+export interface SetStatusParams {
+  /** Пусто — снять свою пометку и вернуться к обычному состоянию процесса. */
+  note?: string;
+  failed?: boolean;
+}
+
+export interface SearchHistoryParams {
+  query: string;
+  limit?: number;
+}
+
 export const HOST_READY = 'host.ready';
 
 export interface HostReadyParams {

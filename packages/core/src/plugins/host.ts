@@ -164,6 +164,33 @@ export function startPluginHost(): void {
           });
         },
       },
+
+      model: {
+        ask: (input) => peer.call(TO_CORE.ask, input) as Promise<string>,
+      },
+
+      notify: async (title, body) => {
+        await peer.call(TO_CORE.notify, { title, ...(body ? { body } : {}) });
+      },
+
+      status: {
+        set: async (note, failed) => {
+          await peer.call(TO_CORE.setStatus, { note, ...(failed ? { failed } : {}) });
+        },
+        clear: async () => {
+          await peer.call(TO_CORE.setStatus, {});
+        },
+      },
+
+      history: {
+        search: (query, limit) =>
+          peer.call(TO_CORE.searchHistory, {
+            query,
+            ...(limit ? { limit } : {}),
+          }) as Promise<
+            Array<{ messageId: string; conversationId: string; role: string; snippet: string }>
+          >,
+      },
     };
   }
 

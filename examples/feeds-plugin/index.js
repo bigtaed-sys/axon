@@ -31,6 +31,7 @@ export async function activate(api) {
     limit: Number(api.settings.get('limit') ?? 30),
     inPrompt: Boolean(api.settings.get('inPrompt')),
     promptCount: Number(api.settings.get('promptCount') ?? 5),
+    notify: Boolean(api.settings.get('notify')),
   });
 
   /**
@@ -65,6 +66,17 @@ export async function activate(api) {
       .slice(0, Math.max(1, limit));
 
     fs.writeFileSync(storePath, JSON.stringify(items), 'utf8');
+
+    /**
+     * Сказать о себе, когда лента не отвечает.
+     *
+     * Процесс плагина при этом жив-здоров, и без пометки человек видел бы
+     * «работает» у плагина, который третий день ничего не приносит.
+     */
+    const broken = report.filter((line) => line.includes('не ответила'));
+    if (broken.length === urls.length) await api.status.set(broken[0], true);
+    else await api.status.clear();
+
     return { report, added: added.length };
   }
 
@@ -98,6 +110,32 @@ export async function activate(api) {
     },
   });
 
+  await api.tools.register({
+    name: 'digest',
+    title: 'Пересказ лент',
+    description:
+      'Коротко пересказать, что нового в лентах. Вызывай, когда просят не ' +
+      'список заголовков, а «что там вообще происходит».',
+    tier: 'safe',
+    parameters: { type: 'object', properties: {} },
+    execute: async () => {
+      if (items.length === 0) await refresh();
+      if (items.length === 0) return 'Пока ничего нет';
+
+      /**
+       * Спрашиваем ту модель, которую человек настроил в ядре.
+       *
+       * Свой ключ заводить не пришлось бы, но тогда расход ушёл бы мимо
+       * счётчика и мимо потолка — человек платил бы и не видел за что.
+       */
+      return await api.model.ask({
+        system: 'Ты пересказываешь новостную ленту. Три-четыре предложения, без вступлений.',
+        prompt: ['Заголовки:', ...items.slice(0, 20).map((item) => `- ${item.title}`)].join('\n'),
+        maxTokens: 400,
+      });
+    },
+  });
+
   // ─── Вклад в промпт ───────────────────────────────────────────────────────
 
   /**
@@ -120,6 +158,16 @@ export async function activate(api) {
   api.jobs.on('обновление', async () => {
     const { report, added } = await refresh();
     api.log.info('ленты обновлены', { added, report: report.join('; ') });
+
+    /**
+     * Уведомление — только если человек попросил и только о новом.
+     *
+     * Плагин, который звенит каждый час просто потому, что проснулся,
+     * выключают в тот же день вместе со всей пользой.
+     */
+    if (added > 0 && settings().notify) {
+      await api.notify(`Новых заголовков: ${added}`, items[0]?.title ?? '');
+    }
   });
 
   api.actions.on('refresh', async () => {
