@@ -1,0 +1,37 @@
+# Проверки на каждый push и pull request.
+#
+# Ровно то же, что запускается руками перед коммитом: типы и тесты. Смысл не в
+# том, чтобы поймать что-то новое, а в том, чтобы нельзя было забыть.
+name: Проверки
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Версия берётся из git-тега (scripts/version.mjs), а мелкая выкачка
+          # тегов не приносит: сборка получилась бы «0.0.0-dev».
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          # node:sqlite появился в 22.5 — на более старом ядро не поднимется.
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Типы
+        run: npm run typecheck
+
+      - name: Тесты
+        run: npm test
+
+      - name: Клиент
+        run: npm run typecheck --workspace @axon/desktop

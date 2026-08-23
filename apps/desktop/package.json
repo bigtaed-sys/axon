@@ -1,6 +1,7 @@
 {
   "name": "@axon/desktop",
   "version": "0.1.0",
+  "comment:version": "Заглушка. Настоящий номер приходит из git-тега: build/dist.mjs передаёт его сборщику через extraMetadata, а рендерер получает через define в vite.config.ts.",
   "private": true,
   "comment:productName": "Отсюда Electron берёт имя приложения, а значит и папку данных. Без него данные легли бы в %APPDATA%/@axon/desktop — путь со служебным символом, который человек видит и не понимает.",
   "productName": "Axon",
@@ -19,8 +20,8 @@
     "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
     "icon": "node build/make-icon.mjs",
     "stage:core": "node build/stage-core.mjs",
-    "dist": "npm run build && npm run icon && npm run stage:core && electron-builder",
-    "dist:dir": "npm run build && npm run icon && npm run stage:core && electron-builder --dir"
+    "dist": "npm run build && npm run icon && npm run stage:core && node build/dist.mjs",
+    "dist:dir": "npm run build && npm run icon && npm run stage:core && node build/dist.mjs --dir"
   },
   "dependencies": {
     "@axon/client-sdk": "*",
