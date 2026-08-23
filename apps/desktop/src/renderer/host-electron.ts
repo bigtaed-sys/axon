@@ -39,7 +39,6 @@ export function installElectronHost(): boolean {
     connection: () => bridge.connection(),
     connectRemote: (input) => bridge.connectRemote(input),
     probe: (url) => bridge.probe(url),
-    forgetRemote: () => bridge.forgetRemote(),
 
     local: {
       // Открытость в сеть и выбор своего ядра — одно действие: доступность

@@ -19,7 +19,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "comment:check": "Всё, что должно быть зелёным перед push. Отдельной командой, чтобы не вспоминать три.",
-    "check": "npm run typecheck && npm test && npm run typecheck --workspace @axon/ui && npm run typecheck --workspace @axon/desktop",
+    "check": "npm run typecheck && npm test && npm run typecheck --workspace @axon/ui && npm run typecheck --workspace @axon/desktop && npm run typecheck --workspace @axon/mobile",
     "release:npm": "node scripts/release-npm.mjs"
   },
   "devDependencies": {

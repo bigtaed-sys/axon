@@ -25,7 +25,7 @@ export function TopBar({
   return (
     // Правый отступ — под системные кнопки окна: рамка скрыта, но Electron
     // резервирует под них полосу, и всё, что окажется под ней, некликабельно.
-    <header className="drag-region h-12 shrink-0 flex items-center justify-between pl-4 pr-[150px] border-b border-border bg-surface">
+    <header className="drag-region h-12 shrink-0 flex items-center justify-between pl-4 pr-[var(--window-controls)] border-b border-border bg-surface">
       <div className="flex items-center gap-3">
         <div className="w-7 h-7 rounded-lg bg-accent text-accent-fg flex items-center justify-center">
           <i className="bi bi-robot text-base" />

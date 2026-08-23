@@ -88,7 +88,11 @@ export class PairingService {
   }
 
   /** Обменять код на токен. Код одноразовый. */
-  complete(code: string, deviceName?: string): { device: Device; token: string } | null {
+  complete(
+    code: string,
+    deviceName?: string,
+    platform?: DevicePlatform,
+  ): { device: Device; token: string } | null {
     this.sweep();
     const pending = this.pending.get(code);
     if (!pending) return null;
@@ -97,7 +101,7 @@ export class PairingService {
     const token = generateToken();
     const device = this.runtime.store.pairDevice({
       name: deviceName || pending.name,
-      platform: pending.platform,
+      platform: platform ?? pending.platform,
       scopes: pending.scopes,
       tokenHash: hashToken(token),
     });

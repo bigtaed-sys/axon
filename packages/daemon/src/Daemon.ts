@@ -9,6 +9,7 @@ import { createRuntime, logger } from '@axon/core';
 import { authenticate, PairingService } from './auth.js';
 import { PermissionHub } from './PermissionHub.js';
 import type { Signal } from '@axon/protocol';
+import { zDevicePlatform } from '@axon/protocol';
 import {
   API_HASH_SECRET,
   API_ID_SETTING,
@@ -24,6 +25,9 @@ import { WsSession } from './WsSession.js';
 declare const __AXON_VERSION__: string;
 export const DAEMON_VERSION =
   typeof __AXON_VERSION__ === 'string' ? __AXON_VERSION__ : '0.0.0-dev';
+/** Ручки, к которым обращается окно клиента до того, как у него есть токен. */
+const CORS_PATHS = new Set(['/health', '/v1/pair']);
+
 /** Потолок загружаемого блоба. Без него один запрос кладёт ядро по памяти. */
 const MAX_UPLOAD_BYTES = 64 * 1024 * 1024;
 
@@ -439,10 +443,15 @@ export class Daemon {
      * ядра, и человек видит голое «failed to fetch» под картинкой.
      *
      * Разрешаем любой источник намеренно: без токена устройства эти ручки
-     * бесполезны, а токен чужой странице взять неоткуда. Пейринг сюда не
-     * входит — там токен как раз выдают.
+     * бесполезны, а токен чужой странице взять неоткуда.
+     *
+     * Пейринг и здоровье — тоже здесь, и вот почему. Приложение на телефоне
+     * меняет код на токен само, из окна, а окно — всегда чужой источник. Без
+     * разрешения телефон не подключился бы вовсе. Риска это почти не
+     * добавляет: чужая страница и сейчас может послать сюда запрос, просто не
+     * может прочитать ответ, а без одноразового кода ответ ей ничего не даст.
      */
-    if (url.pathname.startsWith('/v1/blobs')) {
+    if (url.pathname.startsWith('/v1/blobs') || CORS_PATHS.has(url.pathname)) {
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Headers', 'authorization, content-type');
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -513,7 +522,14 @@ export class Daemon {
       const code = typeof body?.['code'] === 'string' ? body['code'] : '';
       const name = typeof body?.['name'] === 'string' ? body['name'] : undefined;
 
-      const paired = this.pairing.complete(code.trim().toUpperCase(), name);
+      // Телефон говорит о себе сам: код мог быть выдан для чего угодно, а в
+      // списке устройств иконка и подпись должны совпадать с реальностью.
+      const platform = zDevicePlatform.safeParse(body?.['platform']);
+      const paired = this.pairing.complete(
+        code.trim().toUpperCase(),
+        name,
+        platform.success ? platform.data : undefined,
+      );
       if (!paired) return respond(res, 403, { error: 'invalid_code' });
 
       return respond(res, 200, {

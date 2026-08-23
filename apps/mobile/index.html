@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <!--
+      viewport-fit=cover — чтобы приложение занимало экран целиком, включая
+      область под вырезом камеры; отступы под неё интерфейс берёт из
+      safe-area-inset. maximum-scale и user-scalable=no убирают случайное
+      увеличение двойным касанием: в переписке оно срабатывает чаще, чем нужно.
+    -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <title>Axon</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./src/main.tsx"></script>
+  </body>
+</html>

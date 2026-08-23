@@ -69,7 +69,6 @@ export interface Host {
   /** Обменять код на токен и запомнить чужое ядро. */
   connectRemote(input: { url: string; code: string; name: string }): Promise<Connection>;
   probe(url: string): Promise<CoreProbe>;
-  forgetRemote(): Promise<Connection>;
 
   local?: LocalCoreHost;
   /** Цвет системных кнопок окна — только там, где окно рисуем мы. */

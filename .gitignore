@@ -25,3 +25,7 @@ develop_docs/
 Thumbs.db
 .idea/
 .vscode/
+
+# Оболочка Android: генерируется `cap add android` из capacitor.config.ts.
+apps/mobile/android/
+apps/mobile/dist/
