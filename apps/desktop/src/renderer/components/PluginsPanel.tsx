@@ -44,7 +44,16 @@ const PERMISSION: Record<string, string> = {
   journal: 'чтение переписки',
 };
 
-export function PluginsPanel({ plugins, client }: { plugins: PluginInfo[]; client: AxonClient }) {
+export function PluginsPanel({
+  plugins,
+  client,
+  local,
+}: {
+  plugins: PluginInfo[];
+  client: AxonClient;
+  /** Ядро запущено на этой же машине. */
+  local: boolean;
+}) {
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -103,6 +112,7 @@ export function PluginsPanel({ plugins, client }: { plugins: PluginInfo[]; clien
         <AddDialog
           client={client}
           installed={new Set(plugins.map((p) => p.id))}
+          local={local}
           onClose={() => setAdding(false)}
         />
       )}
@@ -124,12 +134,13 @@ function Failure({ text, onClose }: { text: string; onClose: () => void }) {
 
 // ─── Добавление ─────────────────────────────────────────────────────────────
 
-type Way = 'catalog' | 'mcp' | 'git';
+type Way = 'catalog' | 'mcp' | 'git' | 'folder';
 
 const WAYS: Array<{ id: Way; title: string; icon: string }> = [
   { id: 'catalog', title: 'Каталог', icon: 'bi-box-seam' },
   { id: 'mcp', title: 'MCP-сервер', icon: 'bi-plug' },
   { id: 'git', title: 'Репозиторий', icon: 'bi-git' },
+  { id: 'folder', title: 'Папка', icon: 'bi-folder2-open' },
 ];
 
 type RunFn = (label: string, action: () => Promise<unknown>) => Promise<void>;
@@ -148,10 +159,13 @@ type RunFn = (label: string, action: () => Promise<unknown>) => Promise<void>;
 function AddDialog({
   client,
   installed,
+  local,
   onClose,
 }: {
   client: AxonClient;
   installed: Set<string>;
+  /** Ядро на этой же машине. От этого зависит смысл локального пути. */
+  local: boolean;
   onClose: () => void;
 }) {
   const [way, setWay] = useState<Way>('catalog');
@@ -213,6 +227,7 @@ function AddDialog({
           )}
           {way === 'mcp' && <McpWay client={client} busy={busy} onRun={run} />}
           {way === 'git' && <GitWay client={client} busy={busy} onRun={run} />}
+          {way === 'folder' && <FolderWay client={client} busy={busy} onRun={run} local={local} />}
         </div>
       </div>
     </div>
@@ -436,6 +451,90 @@ function GitWay({ client, busy, onRun }: { client: AxonClient; busy: string | nu
       >
         {busy === 'git' ? 'Клонирую…' : 'Поставить'}
       </button>
+    </>
+  );
+}
+
+/**
+ * Установка из папки на диске.
+ *
+ * Ради авторов плагинов. До этого свой плагин можно было поставить только
+ * через CLI или запушив в репозиторий — то есть каждая правка означала коммит,
+ * пуш и переустановку. Папка подключается как есть: правишь файлы, перезапускаешь
+ * плагин, видишь результат.
+ *
+ * Папка не копируется, а подключается по месту. Поэтому обновление плагина её
+ * не перезаписывает — и поэтому же плагин перестанет работать, если папку
+ * убрать или переименовать.
+ */
+function FolderWay({
+  client,
+  busy,
+  onRun,
+  local,
+}: {
+  client: AxonClient;
+  busy: string | null;
+  onRun: RunFn;
+  local: boolean;
+}) {
+  const [dir, setDir] = useState('');
+
+  const install = (): void => {
+    const trimmed = dir.trim();
+    if (!trimmed) return;
+    void onRun('folder', () =>
+      client.call('plugin.install', { source: { type: 'link', path: trimmed } }),
+    );
+  };
+
+  return (
+    <>
+      <p className="mb-3 text-[11px] text-text-dim leading-relaxed">
+        Папка с файлом <code className="font-mono">axon.plugin.json</code>. Она подключается по
+        месту, а не копируется: правите файлы — перезапускаете плагин — видите результат. Так
+        удобнее всего писать свой.
+      </p>
+
+      <div className="flex gap-2">
+        <input
+          value={dir}
+          onChange={(e) => setDir(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && install()}
+          placeholder={local ? 'C:\\проекты\\мой-плагин' : '/путь/на/машине/с/ядром'}
+          className="flex-1 h-9 px-3 rounded-lg bg-bg border border-border text-[12px] font-mono outline-none focus:border-accent transition-colors"
+        />
+        {local && window.axon?.pickFolder && (
+          <button
+            type="button"
+            onClick={() => void window.axon!.pickFolder!().then((picked) => picked && setDir(picked))}
+            className="h-9 px-3 rounded-lg border border-border text-[12px] text-text-muted hover:border-border-strong hover:text-text transition-colors"
+          >
+            Выбрать…
+          </button>
+        )}
+      </div>
+
+      {!local && (
+        <p className="mt-2 text-[11px] text-warning leading-relaxed">
+          Ядро работает на другой машине — путь должен существовать <b>там</b>, а не здесь.
+          Выбрать папку кнопкой поэтому нельзя: у вашего компьютера с тем диском ничего общего.
+        </p>
+      )}
+
+      <button
+        type="button"
+        disabled={!dir.trim() || busy !== null}
+        onClick={install}
+        className="mt-3 h-9 px-4 rounded-lg bg-accent text-accent-fg text-[12px] font-medium disabled:opacity-40 hover:opacity-90 transition-opacity"
+      >
+        {busy === 'folder' ? 'Подключаю…' : 'Подключить'}
+      </button>
+
+      <p className="mt-3 text-[11px] text-text-dim leading-relaxed">
+        С чего начать — <code className="font-mono">examples/feeds-plugin</code> в репозитории
+        Axon: рабочий плагин без зависимостей, где задействовано всё сразу.
+      </p>
     </>
   );
 }

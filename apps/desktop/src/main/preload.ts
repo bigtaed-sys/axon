@@ -47,6 +47,9 @@ contextBridge.exposeInMainWorld('axon', {
   setAutostart: (enable: boolean): Promise<{ supported: boolean; enabled: boolean }> =>
     ipcRenderer.invoke('axon:set-autostart', enable),
 
+  /** Выбрать папку с плагином. `null` — человек передумал. */
+  pickFolder: (): Promise<string | null> => ipcRenderer.invoke('axon:pick-folder'),
+
   titlebar: (colors: { color: string; symbolColor: string }): Promise<void> =>
     ipcRenderer.invoke('axon:titlebar', colors),
 });

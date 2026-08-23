@@ -24,6 +24,8 @@ export interface AxonBridge {
   restartLocal(): Promise<Connection>;
   autostart(): Promise<{ supported: boolean; enabled: boolean }>;
   setAutostart(enable: boolean): Promise<{ supported: boolean; enabled: boolean }>;
+  /** Выбрать папку с плагином. `null` — человек передумал. */
+  pickFolder?(): Promise<string | null>;
   titlebar?(colors: { color: string; symbolColor: string }): Promise<void>;
 }
 

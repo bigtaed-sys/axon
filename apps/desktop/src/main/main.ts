@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { app, BrowserWindow, ipcMain, Menu, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron';
 import * as autostart from './autostart.js';
 import { ConnectionManager, type Connection } from './connection.js';
 
@@ -263,6 +263,28 @@ ipcMain.handle('axon:forget-remote', async (): Promise<Connection> => {
  * смене темы рендерер присылает актуальные цвета: иначе управляющие кнопки
  * остаются от прошлой темы и выбиваются из шапки.
  */
+/**
+ * Выбрать папку с плагином.
+ *
+ * Единственное, ради чего понадобился системный диалог: путь к папке рендерер
+ * узнать не может — в вебе такого нет и быть не должно.
+ *
+ * Имеет смысл только для ядра на этой же машине. У ядра на сервере своя
+ * файловая система, и выбранный здесь путь там ничего не значит — поэтому
+ * окно спрашивает про это до того, как покажет кнопку.
+ */
+ipcMain.handle('axon:pick-folder', async (): Promise<string | null> => {
+  if (!window) return null;
+
+  const chosen = await dialog.showOpenDialog(window, {
+    title: 'Папка с плагином',
+    properties: ['openDirectory'],
+    buttonLabel: 'Выбрать',
+  });
+
+  return chosen.canceled ? null : (chosen.filePaths[0] ?? null);
+});
+
 ipcMain.handle('axon:titlebar', (_event, colors: { color: string; symbolColor: string }) => {
   if (!window || window.isDestroyed()) return;
   window.setTitleBarOverlay({ ...colors, height: 48 });
