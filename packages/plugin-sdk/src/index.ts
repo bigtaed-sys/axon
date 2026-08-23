@@ -147,6 +147,24 @@ export interface PluginApi {
     get<T = unknown>(key: string): T | undefined;
     set(values: Record<string, unknown>): Promise<void>;
     onChange(listener: (values: Record<string, unknown>) => void): void;
+
+    /**
+     * Прочитать с приведением типа и умолчанием.
+     *
+     * `get` возвращает `unknown`, и каждый плагин начинался с десятка строк
+     * ручного разбора: `Number(api.settings.get('limit') ?? 30)`. Мелочь,
+     * которая встречается в каждом плагине по нескольку раз, — а значит и
+     * ошибаются в ней регулярно: пустое поле превращается в `NaN`, галочка
+     * из формы приходит строкой `"false"` и оказывается истиной.
+     *
+     * Умолчание обязательно: настройка, которую человек не заполнил, — это
+     * норма, а не исключительная ситуация.
+     */
+    text(key: string, fallback: string): string;
+    number(key: string, fallback: number): number;
+    flag(key: string, fallback: boolean): boolean;
+    /** Многострочное поле как список: пустые строки отброшены, края обрезаны. */
+    lines(key: string): string[];
   };
 
   readonly tools: {

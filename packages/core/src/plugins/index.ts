@@ -11,3 +11,5 @@ export type { InstallResult } from './install.js';
 export { RpcPeer, RpcError } from './rpc.js';
 export type { RpcFrame } from './rpc.js';
 export type * from './api.js';
+export { scaffold } from './scaffold.js';
+export type { ScaffoldResult } from './scaffold.js';

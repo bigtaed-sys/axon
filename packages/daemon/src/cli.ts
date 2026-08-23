@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
-import { createBackup, createRuntime, resolveConfig, restoreBackup } from '@axon/core';
+import { createBackup, createRuntime, resolveConfig, restoreBackup, scaffold } from '@axon/core';
 import { parseMcpConfig } from '@axon/protocol';
 import { Daemon } from './Daemon.js';
 
@@ -190,6 +190,25 @@ async function devices(): Promise<void> {
  */
 async function plugin(args: string[]): Promise<void> {
   const [action = 'list', target] = args;
+
+  /**
+   * Заготовка не трогает ядро вовсе — она просто пишет файлы.
+   *
+   * Поэтому обрабатывается до всего остального: и до проверки «ядро
+   * запущено», которая к ней не относится, и до создания рантайма, ради
+   * которого пришлось бы открывать базу и поднимать плагины.
+   */
+  if (action === 'new') {
+    const created = scaffold(target ?? '.', args[2]);
+    console.log(`Плагин ${created.id} создан в ${created.dir}`);
+    console.log(`  ${created.files.join(', ')}`);
+    console.log('');
+    console.log('  Подключить и посмотреть:');
+    console.log(`    axon plugin link ${created.dir}`);
+    console.log(`    axon plugin logs ${created.id}`);
+    return;
+  }
+
   const record = readRecord();
   if (record && action !== 'list') {
     return fail(
@@ -392,6 +411,7 @@ function usage(): void {
   axon backup [файл] [--with-keys]              снять копию (ядро можно не останавливать)
   axon restore <файл>                           развернуть копию (ядро должно быть остановлено)
 
+  axon plugin new <папка> [id]                  заготовка своего плагина
   axon plugin list                              что установлено и в каком состоянии
   axon plugin catalog                           встроенный каталог
   axon plugin add <id|git-url>                  поставить из каталога или из репозитория

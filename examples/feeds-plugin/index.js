@@ -24,14 +24,11 @@ export async function activate(api) {
   let items = read(storePath, api);
 
   const settings = () => ({
-    urls: String(api.settings.get('urls') ?? '')
-      .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean),
-    limit: Number(api.settings.get('limit') ?? 30),
-    inPrompt: Boolean(api.settings.get('inPrompt')),
-    promptCount: Number(api.settings.get('promptCount') ?? 5),
-    notify: Boolean(api.settings.get('notify')),
+    urls: api.settings.lines('urls'),
+    limit: api.settings.number('limit', 30),
+    inPrompt: api.settings.flag('inPrompt', false),
+    promptCount: api.settings.number('promptCount', 5),
+    notify: api.settings.flag('notify', false),
   });
 
   /**

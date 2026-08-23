@@ -244,15 +244,23 @@ describe('установка', () => {
   });
 });
 
+/**
+ * Обёртка вокруг MCP.
+ *
+ * Команда сервера здесь — мгновенно завершающийся `node -e 0`, а не настоящий
+ * пакет через `npx`. Проверяется установка: манифест, права, отсутствие кода.
+ * Тянуть чужой сервер из реестра ради этого значит поставить сеть между тестом
+ * и его смыслом — а в CI ещё и получить то падающий, то проходящий прогон.
+ */
 describe('свой MCP-сервер', () => {
   it('конфигурация из README сервера разбирается во всех ходовых формах', () => {
     // Так пишут в README под Claude Desktop.
     expect(
-      parseMcpConfig('{"mcpServers":{"github":{"command":"npx","args":["-y","@x/srv"]}}}'),
+      parseMcpConfig('{"mcpServers":{"github":{"command":"node","args":["-e","0"]}}}'),
     ).toEqual([
       {
         name: 'github',
-        transport: { type: 'stdio', command: 'npx', args: ['-y', '@x/srv'], env: {} },
+        transport: { type: 'stdio', command: 'node', args: ['-e', '0'], env: {} },
       },
     ]);
 
@@ -274,7 +282,7 @@ describe('свой MCP-сервер', () => {
 
   it('ставится плагином-обёрткой без всякого кода', async () => {
     const [server] = parseMcpConfig(
-      '{"mcpServers":{"my-server":{"command":"npx","args":["-y","@x/srv"],"env":{"TOKEN":"t"}}}}',
+      '{"mcpServers":{"my-server":{"command":"node","args":["-e","0"],"env":{"TOKEN":"t"}}}}',
     );
 
     const info = await runtime.plugins.install({
@@ -292,7 +300,7 @@ describe('свой MCP-сервер', () => {
       fs.readFileSync(path.join(tmpDir, 'plugins', 'my-server', 'axon.plugin.json'), 'utf8'),
     ) as { main?: string; mcpServers: Record<string, { command: string }> };
     expect(manifest.main).toBeUndefined();
-    expect(manifest.mcpServers['my-server']!.command).toBe('npx');
+    expect(manifest.mcpServers['my-server']!.command).toBe('node');
   });
 });
 

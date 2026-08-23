@@ -81,6 +81,40 @@ export function startPluginHost(): void {
           await peer.call(TO_CORE.setSettings, { values });
         },
         onChange: (listener) => settingsListeners.push(listener),
+
+        /**
+         * Разбор с умолчанием.
+         *
+         * Живёт здесь, а не у автора плагина: `Number(значение ?? 30)` на
+         * пустой строке даёт ноль, а не тридцать, и галочка из формы приходит
+         * строкой `"false"`, которая истинна. Каждый плагин переписывал бы это
+         * заново и ошибался бы одинаково.
+         */
+        text: (key, fallback) => {
+          const value = settings[key];
+          if (value === undefined || value === null) return fallback;
+          const text = String(value).trim();
+          return text || fallback;
+        },
+
+        number: (key, fallback) => {
+          const value = Number(settings[key]);
+          return Number.isFinite(value) ? value : fallback;
+        },
+
+        flag: (key, fallback) => {
+          const value = settings[key];
+          if (value === undefined || value === null || value === '') return fallback;
+          // Строка «false» из формы истинна, если верить ей на слово.
+          if (typeof value === 'string') return value !== 'false' && value !== '0';
+          return Boolean(value);
+        },
+
+        lines: (key) =>
+          String(settings[key] ?? '')
+            .split('\n')
+            .map((line) => line.trim())
+            .filter(Boolean),
       },
 
       tools: {
