@@ -11,7 +11,11 @@
     "llm"
   ],
   "license": "MIT",
-  "repository": { "type": "git", "url": "git+https://github.com/bigtaed-sys/axon.git", "directory": "packages/daemon" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bigtaed-sys/axon.git",
+    "directory": "packages/daemon"
+  },
   "homepage": "https://github.com/bigtaed-sys/axon#readme",
   "bugs": "https://github.com/bigtaed-sys/axon/issues",
   "type": "module",
@@ -24,7 +28,7 @@
     }
   },
   "bin": {
-    "axon": "./dist/cli.js"
+    "axon": "dist/cli.js"
   },
   "files": [
     "dist",
