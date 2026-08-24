@@ -36,6 +36,7 @@ export function MessageInput({
   onCancel,
   onOpenSettings,
   keyboard = true,
+  floating = false,
 }: {
   disabled: boolean;
   streaming: boolean;
@@ -48,6 +49,15 @@ export function MessageInput({
    * ней на маленьком экране тоже не лишнее.
    */
   keyboard?: boolean;
+  /**
+   * Поле само по себе, а не панель во всю ширину.
+   *
+   * На телефоне под ним висит островок разделов, и две плоскости подряд — с
+   * разными фонами и границей между ними — читаются как две панели, налезшие
+   * друг на друга. Одинаковые скруглённые предметы на общем фоне выглядят
+   * задуманными.
+   */
+  floating?: boolean;
   /** Умеет ли выбранная модель смотреть картинки. */
   seesImages: boolean;
   onSend: (parts: ContentPart[]) => void;
@@ -168,7 +178,10 @@ export function MessageInput({
 
   return (
     <div
-      className="shrink-0 border-t border-border bg-surface p-3"
+      className={clsx(
+        'shrink-0',
+        floating ? 'px-3 pt-1 pb-2' : 'border-t border-border bg-surface p-3',
+      )}
       onDragOver={(e) => {
         e.preventDefault();
         setDragging(true);
@@ -210,7 +223,10 @@ export function MessageInput({
 
         <div
           className={clsx(
-            'flex items-end gap-2 bg-bg border rounded-2xl px-3 py-2 transition-colors',
+            'flex items-end gap-2 border px-3 py-2 transition-colors',
+            // Отдельный предмет на общем фоне: та же поверхность и та же тень,
+            // что у островка разделов под ним, и скругление до овала.
+            floating ? 'bg-surface rounded-[22px] shadow-soft' : 'bg-bg rounded-2xl',
             dragging ? 'border-accent border-dashed' : 'border-border focus-within:border-accent',
           )}
         >

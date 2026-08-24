@@ -259,7 +259,9 @@ function Header({
         type="button"
         disabled={!chat}
         onClick={onOpenChats}
-        className="tap max-w-[70%] h-9 px-4 rounded-full bg-surface-high border border-border flex items-center gap-2 text-[13px] font-medium shadow-soft"
+        // `relative` не для положения, а для порядка отрисовки: затемнение под
+        // шапкой лежит абсолютным слоем и без этого красит сам островок.
+        className="tap relative max-w-[70%] h-9 px-4 rounded-full bg-surface-high border border-border flex items-center gap-2 text-[13px] font-medium shadow-soft"
       >
         {chat && <i className="bi bi-chat-dots-fill text-accent text-[11px] shrink-0" />}
         <span className="truncate">{chat ? app.activeTitle : (TITLES[app.screen] ?? 'Axon')}</span>
@@ -322,6 +324,7 @@ function Body({ app, onOpenChats }: { app: ReturnType<typeof useApp>; onOpenChat
           />
           <MessageInput
             keyboard={false}
+            floating
             disabled={app.status !== 'ready'}
             streaming={Boolean(app.stream)}
             client={client}
