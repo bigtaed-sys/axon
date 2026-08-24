@@ -40,6 +40,17 @@ if (!process.env['ANDROID_HOME'] && !fs.existsSync(path.join(android, 'local.pro
 
 console.log(`Версия ${version}, код ${code}\n`);
 
+/**
+ * Страница собирается здесь же и здесь же переносится в оболочку.
+ *
+ * Раньше это делал соседний скрипт, а этот только звал Gradle. Одного запуска
+ * в обход соседа хватило, чтобы APK собрался из вчерашней страницы: нативная
+ * часть новая, веб старый, и по виду не отличить. Полчаса ушло на поиск
+ * правок, которых в сборке не было.
+ */
+run('npx', ['vite', 'build']);
+run('npx', ['cap', 'sync', 'android']);
+
 // Полный путь, а не имя: с оболочкой Windows ищет команду по PATH, а не в
 // рабочей папке, и «gradlew.bat не является внутренней командой» — это оно.
 const gradle = path.join(android, process.platform === 'win32' ? 'gradlew.bat' : 'gradlew');
@@ -56,3 +67,11 @@ const named = path.join(root, `Axon-${version}.apk`);
 fs.copyFileSync(apk, named);
 
 console.log(`\nГотово: ${named} (${(fs.statSync(named).size / 1024 / 1024).toFixed(1)} МБ)`);
+
+function run(command, args) {
+  execFileSync(command, args, {
+    cwd: root,
+    stdio: 'inherit',
+    shell: process.platform === 'win32',
+  });
+}

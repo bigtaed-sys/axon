@@ -10,7 +10,8 @@
     "build": "vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "sync": "npm run build && cap sync android",
-    "apk": "npm run sync && node build/apk.mjs",
+    "comment:apk": "Одна команда собирает всё: страницу, оболочку и APK. Разделять их значит однажды собрать новое приложение вокруг вчерашней страницы.",
+    "apk": "node build/apk.mjs",
     "android": "npm run sync && cap open android"
   },
   "dependencies": {
