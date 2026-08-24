@@ -68,6 +68,7 @@ export function SettingsPanel({
   onChangeCore,
   onRestartCore,
   onRunSetup,
+  layout = 'columns',
   onReconnect,
 }: {
   client: AxonClient;
@@ -81,8 +82,21 @@ export function SettingsPanel({
   onRestartCore: () => Promise<void>;
   onRunSetup: () => void;
   onReconnect: () => void;
+  /**
+   * `columns` — колонка разделов и содержимое рядом, как на компьютере.
+   * `stack` — сначала список, потом раздел целиком: на телефоне колонка на
+   * 210 пикселей отнимает у настроек половину экрана.
+   */
+  layout?: 'columns' | 'stack';
 }) {
-  const [page, setPage] = useState<PageId>('provider');
+  /**
+   * `stack` — список разделов и раздел вместо двух колонок.
+   *
+   * Колонка на 210 пикселей рядом с содержимым на телефоне отнимает половину
+   * экрана у самих настроек. Поэтому там сначала список, потом раздел на весь
+   * экран, а назад — той же кнопкой, что и везде в системе.
+   */
+  const [page, setPage] = useState<PageId | null>(layout === 'stack' ? null : 'provider');
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [secrets, setSecrets] = useState<SecretStatus[]>([]);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
@@ -139,6 +153,104 @@ export function SettingsPanel({
 
   const shared = { values, secrets, providers, save, saveSecret };
 
+  const status = failure ? (
+    <span className="text-[11px] text-danger leading-relaxed">
+      <i className="bi bi-exclamation-triangle mr-1" />
+      {failure}
+    </span>
+  ) : (
+    saved && (
+      <span className="text-[11px] text-success flex items-center gap-1.5 animate-fade-in">
+        <i className="bi bi-check-circle-fill" />
+        сохранено
+      </span>
+    )
+  );
+
+  const content = (
+    <div className="max-w-2xl px-6 py-6 space-y-4">
+      {page === 'provider' && <ProviderPage {...shared} />}
+      {page === 'vision' && (
+        <>
+          <VisionPage {...shared} />
+          <SearchModelSection {...shared} />
+        </>
+      )}
+      {page === 'persona' && <PersonaPage {...shared} />}
+      {page === 'impulse' && <ImpulsePage {...shared} />}
+      {page === 'telegram' && <TelegramPage {...shared} client={client} />}
+      {page === 'budget' && <BudgetPage {...shared} />}
+      {page === 'core' && (
+        <CorePage
+          connection={connection}
+          onChangeCore={onChangeCore}
+          onRestartCore={onRestartCore}
+          onReconnect={onReconnect}
+        />
+      )}
+      {page === 'access' && <AccessPage connection={connection} onReconnect={onReconnect} />}
+      {page === 'look' && (
+        <LookPage theme={theme} onTheme={onTheme} motion={motion} onMotion={onMotion} />
+      )}
+      {page === 'about' && (
+        <AboutPage client={client} connection={connection} onRunSetup={onRunSetup} />
+      )}
+    </div>
+  );
+
+  if (layout === 'stack') {
+    return page === null ? (
+      <div className="flex-1 min-h-0 overflow-y-auto scrollbar">
+        <div className="px-4 pt-4 pb-3">
+          <h1 className="text-[17px] font-semibold tracking-tight">Настройки</h1>
+        </div>
+        <div className="px-3 pb-6 space-y-4">
+          {GROUPS.map((group) => (
+            <div key={group.title}>
+              <div className="px-2 pb-1.5 text-[10px] uppercase tracking-wider font-semibold text-text-dim">
+                {group.title}
+              </div>
+              <div className="space-y-1">
+                {group.ids.map((id) => {
+                  const item = PAGES.find((candidate) => candidate.id === id)!;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setPage(id)}
+                      className="w-full h-12 px-3.5 rounded-xl2 bg-surface border border-border flex items-center gap-3 text-left text-[14px] active:bg-surface-elev"
+                    >
+                      <i className={clsx('bi shrink-0 text-accent', item.icon)} />
+                      <span className="flex-1 truncate">{item.label}</span>
+                      <i className="bi bi-chevron-right text-text-dim text-[11px]" />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    ) : (
+      <div className="flex-1 min-h-0 flex flex-col">
+        <div className="shrink-0 flex items-center gap-2 px-3 py-2 border-b border-border">
+          <button
+            type="button"
+            onClick={() => setPage(null)}
+            className="w-9 h-9 rounded-full flex items-center justify-center text-text-muted active:bg-surface-elev"
+          >
+            <i className="bi bi-chevron-left" />
+          </button>
+          <span className="text-[15px] font-semibold flex-1 truncate">
+            {PAGES.find((candidate) => candidate.id === page)?.label}
+          </span>
+          {status}
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar">{content}</div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 flex min-h-0">
       <aside className="w-[210px] shrink-0 bg-surface border-r border-border flex flex-col">
@@ -191,53 +303,10 @@ export function SettingsPanel({
           ))}
         </nav>
 
-        <div className="p-3 border-t border-border min-h-[44px] flex items-center">
-          {failure ? (
-            <span className="text-[11px] text-danger leading-relaxed">
-              <i className="bi bi-exclamation-triangle mr-1" />
-              {failure}
-            </span>
-          ) : (
-            saved && (
-              <span className="text-[11px] text-success flex items-center gap-1.5 animate-fade-in">
-                <i className="bi bi-check-circle-fill" />
-                сохранено
-              </span>
-            )
-          )}
-        </div>
+        <div className="p-3 border-t border-border min-h-[44px] flex items-center">{status}</div>
       </aside>
 
-      <div className="flex-1 overflow-y-auto scrollbar">
-        <div className="max-w-2xl px-6 py-6 space-y-4">
-          {page === 'provider' && <ProviderPage {...shared} />}
-          {page === 'vision' && (
-            <>
-              <VisionPage {...shared} />
-              <SearchModelSection {...shared} />
-            </>
-          )}
-          {page === 'persona' && <PersonaPage {...shared} />}
-          {page === 'impulse' && <ImpulsePage {...shared} />}
-          {page === 'telegram' && <TelegramPage {...shared} client={client} />}
-          {page === 'budget' && <BudgetPage {...shared} />}
-          {page === 'core' && (
-            <CorePage
-              connection={connection}
-              onChangeCore={onChangeCore}
-              onRestartCore={onRestartCore}
-              onReconnect={onReconnect}
-            />
-          )}
-          {page === 'access' && <AccessPage connection={connection} onReconnect={onReconnect} />}
-          {page === 'look' && (
-            <LookPage theme={theme} onTheme={onTheme} motion={motion} onMotion={onMotion} />
-          )}
-          {page === 'about' && (
-            <AboutPage client={client} connection={connection} onRunSetup={onRunSetup} />
-          )}
-        </div>
-      </div>
+      <div className="flex-1 overflow-y-auto scrollbar">{content}</div>
     </div>
   );
 }

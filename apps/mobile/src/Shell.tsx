@@ -333,6 +333,7 @@ function Body({ app, onOpenChats }: { app: ReturnType<typeof useApp>; onOpenChat
     case 'settings':
       return (
         <SettingsPanel
+          layout="stack"
           client={client}
           connection={app.connection}
           plugins={app.plugins}
