@@ -6,6 +6,8 @@
  * запуске, — см. `host.ts`.
  */
 export { App } from './App.js';
+export { useApp } from './useApp.js';
+export type { AppState } from './useApp.js';
 export { setHost, host } from './host.js';
 export type { Host, LocalCoreHost, Connection, CoreProbe, AutostartState } from './host.js';
 export { useTheme, THEMES } from './theme.js';
