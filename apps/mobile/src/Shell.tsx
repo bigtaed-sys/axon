@@ -115,7 +115,12 @@ export function Shell() {
   }
 
   return (
-    <div className="h-full flex flex-col bg-bg">
+    /*
+      `relative` здесь обязателен. Шапка позиционируется поверх содержимого, и
+      без него отсчёт идёт от окна целиком — то есть от края экрана, под
+      строкой состояния Android. Островок уезжал под часы и значки.
+    */
+    <div className="relative h-full flex flex-col bg-bg">
       {app.banner && (
         <div className="shrink-0 flex items-start gap-2 px-3 py-2 bg-danger/10 border-b border-danger/30 text-[12px] text-danger">
           <i className="bi bi-exclamation-triangle-fill mt-0.5" />
