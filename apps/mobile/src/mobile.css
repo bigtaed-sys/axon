@@ -17,3 +17,83 @@ body {
 :root {
   --window-controls: 12px;
 }
+
+/*
+ * Движение.
+ *
+ * На телефоне оно не украшение: экран один, и без перехода смена раздела
+ * выглядит как подмена картинки — непонятно, что произошло и куда делось
+ * предыдущее. Все анимации короткие (двести с небольшим миллисекунд) и гаснут
+ * вместе с общим переключателем: `data-motion="off"` на <html> убивает их
+ * скопом, поэтому проверок в компонентах нет.
+ */
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes screen-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Кривая с резким началом и мягким концом — шторка «прилетает», а не ползёт. */
+.sheet {
+  animation: sheet-in 0.26s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.backdrop {
+  animation: backdrop-in 0.18s ease-out;
+}
+
+.screen {
+  animation: screen-in 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/*
+ * Отклик на касание.
+ *
+ * У кнопки на телефоне нет наведения, и без ответа на нажатие непонятно,
+ * попал ли ты вообще. Сжатие на несколько процентов заметно пальцем, но не
+ * бросается в глаза.
+ */
+.tap {
+  transition:
+    transform 0.12s ease,
+    background-color 0.16s ease,
+    color 0.16s ease;
+}
+.tap:active {
+  transform: scale(0.94);
+}
+
+/*
+ * Высота островка. Содержимое отступает на неё снизу: островок висит поверх,
+ * и без отступа последнее сообщение и поле ввода прячутся под кнопками.
+ */
+:root {
+  --island-height: 86px;
+}
+
+.under-island {
+  padding-bottom: calc(var(--island-height) + env(safe-area-inset-bottom));
+}

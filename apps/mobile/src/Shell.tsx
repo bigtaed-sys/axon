@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import clsx from 'clsx';
+import { useKeyboard } from './keyboard.js';
 import {
   ChatList,
   ConnectScreen,
@@ -69,6 +70,7 @@ export function Shell() {
   const app = useApp();
   const [chats, setChats] = useState(false);
   const [more, setMore] = useState(false);
+  const typing = useKeyboard();
 
   const { client, status, screen, setScreen } = app;
 
@@ -111,11 +113,19 @@ export function Shell() {
         Отступ снизу — под островок: он висит поверх содержимого, и без места
         под него последнее сообщение и поле ввода оказываются под кнопками.
       */}
-      <main className="flex-1 min-h-0 flex flex-col pb-[76px]">
+      {/*
+        `key` по разделу обязателен: без него React переиспользует узлы, и
+        появление нового экрана не проигрывается вовсе — картинка просто
+        подменяется.
+      */}
+      <main
+        key={screen}
+        className={clsx('screen flex-1 min-h-0 flex flex-col', !typing && 'under-island')}
+      >
         <Body app={app} onOpenChats={() => setChats(true)} />
       </main>
 
-      <Island screen={screen} onGo={go} onMore={() => setMore(true)} />
+      {!typing && <Island screen={screen} onGo={go} onMore={() => setMore(true)} />}
 
       {chats && client && (
         <Sheet title="Чаты" onClose={() => setChats(false)}>
@@ -144,7 +154,7 @@ export function Shell() {
                 key={section.id}
                 type="button"
                 onClick={() => go(section.id)}
-                className="h-12 px-4 rounded-xl2 bg-surface border border-border flex items-center gap-3 text-[14px] active:bg-surface-elev"
+                className="tap h-12 px-4 rounded-xl2 bg-surface border border-border flex items-center gap-3 text-[14px]"
               >
                 <i className={clsx('bi', section.icon, 'text-accent')} />
                 {section.label}
@@ -204,20 +214,21 @@ function Header({
   const chat = app.screen === 'chat';
 
   return (
-    <header className="shrink-0 flex items-center gap-2 px-3 pt-2 pb-1">
+    <header className="shrink-0 relative h-12 flex items-center justify-center px-3">
+      {/*
+        Островок по центру, шириной по содержимому. Тянуть его во всю ширину
+        нельзя: тогда это уже не предмет на экране, а полоса, — а центр
+        единственное место, где такая штука читается сама собой.
+      */}
       <button
         type="button"
         disabled={!chat}
         onClick={onOpenChats}
-        className={clsx(
-          'min-w-0 flex-1 h-9 px-3.5 rounded-full border border-border bg-surface',
-          'flex items-center gap-2 text-[13px] font-medium',
-          chat && 'active:bg-surface-elev',
-        )}
+        className="tap max-w-[70%] h-9 px-4 rounded-full bg-surface-high border border-border flex items-center gap-2 text-[13px] font-medium shadow-soft"
       >
-        {chat && <i className="bi bi-chat-dots-fill text-accent text-[12px] shrink-0" />}
+        {chat && <i className="bi bi-chat-dots-fill text-accent text-[11px] shrink-0" />}
         <span className="truncate">{chat ? app.activeTitle : (TITLES[app.screen] ?? 'Axon')}</span>
-        {chat && <i className="bi bi-chevron-down text-text-dim text-[10px] ml-auto shrink-0" />}
+        {chat && <i className="bi bi-chevron-down text-text-dim text-[9px] shrink-0" />}
       </button>
 
       {chat && (
@@ -225,7 +236,7 @@ function Header({
           type="button"
           onClick={onOpenContext}
           title="Во что обходится контекст"
-          className="w-9 h-9 shrink-0 rounded-full border border-border bg-surface flex items-center justify-center active:bg-surface-elev"
+          className="tap absolute right-3 w-9 h-9 rounded-full bg-surface-high border border-border flex items-center justify-center"
         >
           <i className="bi bi-eye text-[13px] text-text-muted" />
         </button>
@@ -362,8 +373,13 @@ function Island({
   const inMore = MORE.some((section) => section.id === screen);
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 pb-[max(12px,env(safe-area-inset-bottom))] flex justify-center pointer-events-none">
-      <div className="pointer-events-auto flex items-center gap-1 p-1.5 rounded-full border border-border bg-surface/95 backdrop-blur shadow-pop">
+    <nav className="fixed inset-x-0 bottom-0 px-3 pb-[max(10px,env(safe-area-inset-bottom))] flex justify-center pointer-events-none">
+      {/*
+        Ширину островка задаёт экран, а не то, что открыто: кнопки делят её
+        поровну и остаются на месте при переключении. Панель, меняющая размер
+        под вкладкой, заставляет целиться заново после каждого нажатия.
+      */}
+      <div className="pointer-events-auto w-full max-w-[380px] flex items-center gap-1 p-1.5 rounded-[26px] border border-border bg-surface/95 backdrop-blur shadow-pop">
         {ISLAND.map((section) => (
           <IslandButton
             key={section.id}
@@ -380,11 +396,11 @@ function Island({
 }
 
 /**
- * Кнопка островка: подпись появляется только у выбранной.
+ * Кнопка островка: подпись под иконкой и видна всегда.
  *
- * Пять подписей сразу не помещаются, а без единой подписи иконки приходится
- * угадывать. Подпись у текущей отвечает на вопрос «где я», а остальные
- * узнаются нажатием — цена ошибки здесь одно касание.
+ * Иконка без подписи — загадка, которую разгадывают нажатием, а на телефоне
+ * такая загадка стоит перехода в чужой раздел и обратно. Подписи у всех кнопок
+ * заодно держат размер островка постоянным.
  */
 function IslandButton({
   icon,
@@ -401,15 +417,14 @@ function IslandButton({
     <button
       type="button"
       onClick={onClick}
-      aria-label={label}
       aria-pressed={active}
       className={clsx(
-        'h-11 rounded-full flex items-center gap-1.5 transition-colors',
-        active ? 'px-4 bg-accent text-accent-fg' : 'w-11 justify-center text-text-muted',
+        'tap flex-1 min-w-0 h-[54px] rounded-[20px] flex flex-col items-center justify-center gap-1',
+        active ? 'bg-accent text-accent-fg' : 'text-text-muted',
       )}
     >
-      <i className={clsx('bi', icon, 'text-[15px]')} />
-      {active && <span className="text-[12px] font-medium whitespace-nowrap">{label}</span>}
+      <i className={clsx('bi', icon, 'text-[16px] leading-none')} />
+      <span className="text-[9px] font-medium leading-none truncate max-w-full px-0.5">{label}</span>
     </button>
   );
 }
@@ -430,9 +445,12 @@ function Sheet({
   children: React.ReactNode;
 }) {
   return (
-    <div className="fixed inset-0 z-40 flex flex-col justify-end modal-backdrop" onClick={onClose}>
+    <div
+      className="backdrop fixed inset-0 z-40 flex flex-col justify-end modal-backdrop"
+      onClick={onClose}
+    >
       <div
-        className="max-h-[78%] flex flex-col rounded-t-[20px] border-t border-border bg-bg"
+        className="sheet max-h-[78%] flex flex-col rounded-t-[20px] border-t border-border bg-bg"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="shrink-0 flex items-center gap-2 px-4 pt-3 pb-2">
@@ -440,7 +458,7 @@ function Sheet({
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-text-dim active:bg-surface-elev"
+            className="tap w-8 h-8 rounded-full flex items-center justify-center text-text-dim"
           >
             <i className="bi bi-x-lg text-[12px]" />
           </button>
