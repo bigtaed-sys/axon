@@ -8,7 +8,6 @@
 body {
   /* Экран занят целиком, включая область под вырезом. */
   padding-top: env(safe-area-inset-top);
-  padding-bottom: env(safe-area-inset-bottom);
   /* Резинка прокрутки на краях выглядит как отвалившийся интерфейс. */
   overscroll-behavior: none;
 }
@@ -45,17 +44,6 @@ body {
   }
 }
 
-@keyframes screen-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
 /* Кривая с резким началом и мягким концом — шторка «прилетает», а не ползёт. */
 .sheet {
   animation: sheet-in 0.26s cubic-bezier(0.32, 0.72, 0, 1);
@@ -63,10 +51,6 @@ body {
 
 .backdrop {
   animation: backdrop-in 0.18s ease-out;
-}
-
-.screen {
-  animation: screen-in 0.22s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /*
@@ -90,10 +74,74 @@ body {
  * Высота островка. Содержимое отступает на неё снизу: островок висит поверх,
  * и без отступа последнее сообщение и поле ввода прячутся под кнопками.
  */
-:root {
-  --island-height: 86px;
+/*
+ * След островка снизу: сам он 66 пикселей плюс отступ до края экрана.
+ * Содержимое отодвигается ровно на столько же и ещё чуть-чуть — островок
+ * висит поверх, и без этого поле ввода прячется под кнопками. Раньше здесь
+ * складывались два отступа сразу, и между вводом и панелью зияла дыра.
+ */
+.under-island {
+  padding-bottom: calc(72px + max(10px, env(safe-area-inset-bottom)));
 }
 
-.under-island {
-  padding-bottom: calc(var(--island-height) + env(safe-area-inset-bottom));
+/*
+ * Шапка висит поверх содержимого, а не отрезает от него полосу.
+ *
+ * Разговор уходит под островок и виден сквозь него приглушённым — так понятно,
+ * что текст продолжается, а не обрывается. Затемнение градиентом, а не
+ * сплошной заливкой: сплошная снова превратила бы шапку в полосу.
+ */
+.header-float::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgb(var(--c-bg) / 0.92),
+    rgb(var(--c-bg) / 0.72) 60%,
+    rgb(var(--c-bg) / 0)
+  );
+  pointer-events: none;
+}
+
+/*
+ * Перелистывание разделов.
+ *
+ * Новый экран приезжает с той стороны, в которую «листнули». Уезжающий не
+ * анимируем намеренно: держать оба экрана в дереве значит рисовать два
+ * разговора сразу, а выигрыш — доля секунды, которую никто не разглядывает.
+ */
+@keyframes slide-from-right {
+  from {
+    opacity: 0;
+    transform: translateX(14%);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes slide-from-left {
+  from {
+    opacity: 0;
+    transform: translateX(-14%);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.slide-from-right {
+  animation: slide-from-right 0.24s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.slide-from-left {
+  animation: slide-from-left 0.24s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Бегунок островка переезжает по той же кривой, что и сам экран. */
+.island-mark {
+  transition: transform 0.24s cubic-bezier(0.32, 0.72, 0, 1);
 }

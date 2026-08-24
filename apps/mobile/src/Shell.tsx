@@ -66,6 +66,14 @@ const TITLES: Partial<Record<Screen, string>> = Object.fromEntries(
   [...ISLAND, ...MORE].map((section) => [section.id, section.label]),
 );
 
+/** Порядок разделов слева направо — по нему выбирается сторона перехода. */
+const ORDER: Screen[] = [...ISLAND.map((s) => s.id), ...MORE.map((s) => s.id)];
+
+function orderOf(screen: Screen): number {
+  const index = ORDER.indexOf(screen);
+  return index === -1 ? ORDER.length : index;
+}
+
 export function Shell() {
   const app = useApp();
   const [chats, setChats] = useState(false);
@@ -74,7 +82,18 @@ export function Shell() {
 
   const { client, status, screen, setScreen } = app;
 
+  /**
+   * Куда «листнули».
+   *
+   * Разделы лежат в ряд, и переход должен идти в ту же сторону, что и палец:
+   * ушёл вправо по островку — новый экран приезжает справа. Направление, взятое
+   * с потолка, читается хуже, чем его отсутствие: человек запоминает порядок
+   * разделов по движению, и противоречие сбивает эту память.
+   */
+  const [forward, setForward] = useState(true);
+
   const go = (next: Screen): void => {
+    setForward(orderOf(next) >= orderOf(screen));
     setScreen(next);
     setChats(false);
     setMore(false);
@@ -107,7 +126,11 @@ export function Shell() {
         </div>
       )}
 
-      <Header app={app} onOpenChats={() => setChats(true)} onOpenContext={() => app.setShowContext(true)} />
+      <Header
+        app={app}
+        onOpenChats={() => setChats(true)}
+        onOpenContext={() => app.setShowContext(true)}
+      />
 
       {/*
         Отступ снизу — под островок: он висит поверх содержимого, и без места
@@ -120,7 +143,14 @@ export function Shell() {
       */}
       <main
         key={screen}
-        className={clsx('screen flex-1 min-h-0 flex flex-col', !typing && 'under-island')}
+        className={clsx(
+          'flex-1 min-h-0 flex flex-col',
+          forward ? 'slide-from-right' : 'slide-from-left',
+          !typing && 'under-island',
+          // Разделы кроме чата начинаются под шапкой: подсовывать заголовок
+          // панели под островок незачем, читать его там нечем.
+          screen !== 'chat' && 'pt-12',
+        )}
       >
         <Body app={app} onOpenChats={() => setChats(true)} />
       </main>
@@ -214,7 +244,7 @@ function Header({
   const chat = app.screen === 'chat';
 
   return (
-    <header className="shrink-0 relative h-12 flex items-center justify-center px-3">
+    <header className="header-float absolute inset-x-0 top-0 z-20 h-12 flex items-center justify-center px-3">
       {/*
         Островок по центру, шириной по содержимому. Тянуть его во всю ширину
         нельзя: тогда это уже не предмет на экране, а полоса, — а центр
@@ -277,6 +307,7 @@ function Body({ app, onOpenChats }: { app: ReturnType<typeof useApp>; onOpenChat
       return (
         <>
           <MessageList
+            inset="pt-14"
             messages={app.messages}
             stream={app.stream}
             showToolCalls={app.showToolCalls}
@@ -371,6 +402,13 @@ function Island({
   onMore: () => void;
 }) {
   const inMore = MORE.some((section) => section.id === screen);
+  // Где сейчас стоит бегунок. «Ещё» — последняя позиция.
+  const current = inMore
+    ? ISLAND.length
+    : Math.max(
+        0,
+        ISLAND.findIndex((section) => section.id === screen),
+      );
 
   return (
     <nav className="fixed inset-x-0 bottom-0 px-3 pb-[max(10px,env(safe-area-inset-bottom))] flex justify-center pointer-events-none">
@@ -379,7 +417,20 @@ function Island({
         поровну и остаются на месте при переключении. Панель, меняющая размер
         под вкладкой, заставляет целиться заново после каждого нажатия.
       */}
-      <div className="pointer-events-auto w-full max-w-[380px] flex items-center gap-1 p-1.5 rounded-[26px] border border-border bg-surface/95 backdrop-blur shadow-pop">
+      <div className="pointer-events-auto relative w-full max-w-[380px] flex items-center p-1.5 rounded-[26px] border border-border bg-surface/95 backdrop-blur shadow-pop">
+        {/*
+          Подсветка выбранного — отдельный слой, который переезжает, а не
+          перекрашивание кнопок. Переезд показывает, куда именно ты попал, и
+          связывает островок с тем, как в это время листается сам экран.
+        */}
+        <span
+          aria-hidden
+          className="island-mark absolute top-1.5 bottom-1.5 left-1.5 rounded-[20px] bg-accent"
+          style={{
+            width: `calc((100% - 12px) / ${ISLAND.length + 1})`,
+            transform: `translateX(${current * 100}%)`,
+          }}
+        />
         {ISLAND.map((section) => (
           <IslandButton
             key={section.id}
@@ -419,8 +470,9 @@ function IslandButton({
       onClick={onClick}
       aria-pressed={active}
       className={clsx(
-        'tap flex-1 min-w-0 h-[54px] rounded-[20px] flex flex-col items-center justify-center gap-1',
-        active ? 'bg-accent text-accent-fg' : 'text-text-muted',
+        'tap relative z-10 flex-1 min-w-0 h-[54px] rounded-[20px]',
+        'flex flex-col items-center justify-center gap-1',
+        active ? 'text-accent-fg' : 'text-text-muted',
       )}
     >
       <i className={clsx('bi', icon, 'text-[16px] leading-none')} />

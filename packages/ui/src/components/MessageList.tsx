@@ -21,6 +21,7 @@ export function MessageList({
   client,
   persona,
   onSuggest,
+  inset,
 }: {
   messages: Message[];
   stream: RunStream | null;
@@ -28,6 +29,14 @@ export function MessageList({
   client: AxonClient;
   persona: Persona;
   onSuggest: (text: string) => void;
+  /**
+   * Класс для отступов прокручиваемой области.
+   *
+   * На телефоне шапка висит поверх разговора, и без верхнего отступа первое
+   * сообщение начинается под ней. Отступ задаёт тот, кто ставит список: он
+   * один знает, что у него плавает сверху.
+   */
+  inset?: string;
 }) {
   const container = useRef<HTMLDivElement>(null);
 
@@ -60,7 +69,7 @@ export function MessageList({
   const empty = visible.length === 0 && !stream;
 
   return (
-    <div ref={container} className="flex-1 overflow-y-auto scrollbar px-6 py-6">
+    <div ref={container} className={clsx('flex-1 overflow-y-auto scrollbar px-6 py-6', inset)}>
       {empty ? (
         <Welcome persona={persona} onSuggest={onSuggest} />
       ) : (
