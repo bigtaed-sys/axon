@@ -269,14 +269,16 @@ export function App() {
         />
 
         {screen === 'chat' && client && (
-          <ChatList
-            conversations={conversations}
-            activeId={activeId}
-            client={client}
-            onSelect={setActiveId}
-            onCreate={() => void createChat()}
-            onArchive={(id) => void client.call('conversation.archive', { id, archived: true })}
-          />
+          <div className="w-[250px] shrink-0 border-r border-border">
+            <ChatList
+              conversations={conversations}
+              activeId={activeId}
+              client={client}
+              onSelect={setActiveId}
+              onCreate={() => void createChat()}
+              onArchive={(id) => void client.call('conversation.archive', { id, archived: true })}
+            />
+          </div>
         )}
 
         <main className="flex-1 min-w-0 min-h-0 flex flex-col bg-bg">{body()}</main>

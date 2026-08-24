@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { App } from '@axon/ui';
+import { Shell } from './Shell.js';
 import { installMobileHost } from './host-mobile.js';
 // Стили формул и подсветки кода — до наших, чтобы их можно было перебить
 // переменными темы, а не наоборот.
@@ -13,6 +13,6 @@ installMobileHost({ version: __APP_VERSION__, builtAt: __APP_BUILT_AT__ });
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <Shell />
   </StrictMode>,
 );

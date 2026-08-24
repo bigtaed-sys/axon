@@ -78,7 +78,9 @@ export function ChatList({
   const nothing = needle && byTitle.length === 0 && extraHits.length === 0 && !searching;
 
   return (
-    <div className="w-[250px] shrink-0 flex flex-col bg-surface border-r border-border">
+    // Ширина и рамка — дело того, кто ставит список: на компьютере это
+    // колонка слева, на телефоне — шторка во весь экран.
+    <div className="w-full h-full flex flex-col bg-surface">
       <div className="p-3">
         <button
           type="button"

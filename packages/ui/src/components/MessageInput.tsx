@@ -35,10 +35,19 @@ export function MessageInput({
   onSend,
   onCancel,
   onOpenSettings,
+  keyboard = true,
 }: {
   disabled: boolean;
   streaming: boolean;
   client: AxonClient;
+  /**
+   * Есть ли у человека клавиатура.
+   *
+   * На телефоне подсказка «Enter — отправить, Shift+Enter — перенос» не просто
+   * бесполезна: там Enter переносит строку, и подсказка прямо врёт. Место под
+   * ней на маленьком экране тоже не лишнее.
+   */
+  keyboard?: boolean;
   /** Умеет ли выбранная модель смотреть картинки. */
   seesImages: boolean;
   onSend: (parts: ContentPart[]) => void;
@@ -132,6 +141,9 @@ export function MessageInput({
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): void => {
+    // На экранной клавиатуре Enter — это перенос строки и ничто иное:
+    // отправлять по нему значит рвать каждое второе сообщение пополам.
+    if (!keyboard) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       submit();
@@ -232,7 +244,9 @@ export function MessageInput({
             placeholder={
               dragging
                 ? 'Отпустите — приложу к сообщению'
-                : 'Введите сообщение…   (Enter — отправить, Shift+Enter — перенос строки)'
+                : keyboard
+                  ? 'Введите сообщение…   (Enter — отправить, Shift+Enter — перенос строки)'
+                  : 'Сообщение…'
             }
             rows={1}
             className="flex-1 resize-none bg-transparent outline-none text-[14px] text-text placeholder:text-text-dim leading-relaxed py-1.5 scrollbar disabled:opacity-50"
@@ -261,18 +275,20 @@ export function MessageInput({
           )}
         </div>
 
-        <div className="mt-1.5 flex items-center justify-between px-1">
-          <span className="text-[10px] text-text-dim">
-            <kbd className="px-1 rounded bg-surface-elev border border-border">Enter</kbd>
-            {' — отправить · '}
-            <kbd className="px-1 rounded bg-surface-elev border border-border">Shift</kbd>+
-            <kbd className="px-1 rounded bg-surface-elev border border-border">Enter</kbd>
-            {' — перенос · файл можно перетащить или вставить'}
-          </span>
-          <span className="text-[10px] text-text-dim">
-            {text.length > 0 && `${text.length} симв.`}
-          </span>
-        </div>
+        {keyboard && (
+          <div className="mt-1.5 flex items-center justify-between px-1">
+            <span className="text-[10px] text-text-dim">
+              <kbd className="px-1 rounded bg-surface-elev border border-border">Enter</kbd>
+              {' — отправить · '}
+              <kbd className="px-1 rounded bg-surface-elev border border-border">Shift</kbd>+
+              <kbd className="px-1 rounded bg-surface-elev border border-border">Enter</kbd>
+              {' — перенос · файл можно перетащить или вставить'}
+            </span>
+            <span className="text-[10px] text-text-dim">
+              {text.length > 0 && `${text.length} симв.`}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
