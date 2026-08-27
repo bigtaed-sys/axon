@@ -246,6 +246,7 @@ axon code --chat --ttl 60  # только переписка, на минуту
 шифрования секретов.
 
 ```bash
+axon doctor                                     # осмотр: что настроено и что сломано
 axon status                                     # запущено ли и где
 axon secret set provider.anthropic.apiKey sk-…  # ключ провайдера
 axon secret list                                # что задано (значения не показываются)

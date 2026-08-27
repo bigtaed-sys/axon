@@ -55,6 +55,8 @@ async function main(): Promise<void> {
       return await status();
     case 'code':
       return await code(args);
+    case 'doctor':
+      return await doctor();
     case 'stop':
       return stop();
     case 'help':
@@ -203,6 +205,114 @@ async function code(args: string[]): Promise<void> {
   console.log(`  права: ${chatOnly ? 'только переписка' : 'полные'}`);
   console.log(`  адрес для приложения: ${(record.reachable ?? [])[0] ?? record.url}`);
 }
+
+/**
+ * Осмотр установки.
+ *
+ * Отвечает на вопрос «почему не работает» до того, как он задан. Все проверки
+ * здесь — это места, где мы спотыкались по-настоящему: ядро оказывалось не то,
+ * ключ лежал, но не читался, провайдер был выбран без ключа, версия ядра
+ * отставала от приложения.
+ *
+ * Работает и с остановленным ядром: то, что можно узнать из базы, узнаётся из
+ * базы. Иначе самый частый случай — «ядро не поднимается» — остался бы без
+ * ответа.
+ */
+async function doctor(): Promise<void> {
+  const config = resolveConfig();
+  const record = readRecord();
+  const running = record !== null && (await alive(record.url));
+
+  console.log(`Axon ${DAEMON_VERSION}`);
+  console.log(`  данные: ${config.dataDir}`);
+  console.log('');
+
+  const notes: string[] = [];
+  const say = (ok: boolean | null, text: string, hint?: string): void => {
+    console.log(`  ${ok === null ? '·' : ok ? '✓' : '✗'} ${text}`);
+    if (!ok && hint) notes.push(hint);
+  };
+
+  say(running, running ? `ядро на связи: ${record!.url}` : 'ядро не запущено', 'axon start');
+
+  if (record && !running) {
+    say(false, `запись указывает на ${record.url}, но там не отвечают`, 'axon stop && axon start');
+  }
+
+  /**
+   * Дальше нужна база. Открывать её при запущенном ядре нельзя: два процесса
+   * на одном файле — это то, от чего мы ставили защиту в `start`.
+   */
+  if (running) {
+    console.log('');
+    console.log('  Остальное проверяется по базе — остановите ядро: axon stop');
+    return;
+  }
+
+  const runtime = createRuntime();
+  try {
+    const secrets = runtime.store.secrets.status();
+    const broken = secrets.filter((secret) => secret.unreadable);
+    // Пусто — это не «хорошо» и не «плохо»: секретов может не быть вовсе.
+    // Галочка здесь соврала бы о проверке, которой не было.
+    say(
+      secrets.length === 0 ? null : broken.length === 0,
+      secrets.length === 0
+        ? 'секретов нет'
+        : broken.length === 0
+          ? `секретов ${secrets.length}, все читаются`
+          : `не читаются: ${broken.map((secret) => secret.key).join(', ')}`,
+      'база приехала без файла secret.key — впишите ключи заново',
+    );
+
+    const active = String(runtime.store.settings.get('provider.active') ?? 'anthropic');
+    const providers = await runtime.providers.describe();
+    const provider = providers.find((item) => item.id === active);
+    say(
+      Boolean(provider?.configured),
+      provider
+        ? `провайдер ${provider.title}: ${provider.configured ? 'готов' : 'нет ключа'}`
+        : `провайдер ${active} неизвестен ядру`,
+      `axon secret set provider.${active}.apiKey …`,
+    );
+
+    const devices = runtime.store.devices.list();
+    say(devices.length > 0, `устройств ${devices.length}`, 'axon code — выдать код подключения');
+
+    await runtime.startPlugins();
+    const plugins = runtime.plugins.list();
+    const failed = plugins.filter((plugin) => plugin.status === 'failed');
+    say(
+      failed.length === 0,
+      failed.length === 0
+        ? `плагинов ${plugins.length}, работают все`
+        : `не работают: ${failed.map((plugin) => plugin.id).join(', ')}`,
+      failed.length > 0 ? `axon plugin logs ${failed[0]!.id}` : undefined,
+    );
+
+    const catalog = await runtime.plugins.catalog();
+    say(
+      catalog.origin === 'network',
+      `каталог: ${catalog.entries.length} записей, ${CATALOG_ORIGIN[catalog.origin]}`,
+      'сеть недоступна — раздел «Каталог» покажет старое',
+    );
+  } finally {
+    await runtime.close();
+  }
+
+  if (notes.length > 0) {
+    console.log('');
+    console.log('  Что делать:');
+    for (const note of notes) console.log(`    ${note}`);
+  }
+}
+
+/** Откуда взялся каталог — теми же словами, что и в приложении. */
+const CATALOG_ORIGIN: Record<string, string> = {
+  network: 'свежий',
+  cache: 'из кэша',
+  bundled: 'из сборки',
+};
 
 /** Где искать, если ядро не поднялось: вывод фонового процесса пишется сюда. */
 function logPath(): string {
@@ -619,6 +729,7 @@ function usage(): void {
       --foreground, -f                          не уходить в фон (systemd, docker)
   axon status                                   запущено ли ядро и где
   axon code [--chat] [--ttl 300]                новый код подключения устройства
+  axon doctor                                   осмотр: что настроено и что сломано
   axon stop                                     остановить ядро
   axon secret list                              какие секреты заданы
   axon secret get <ключ>                        показать секрет целиком

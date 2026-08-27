@@ -33,6 +33,7 @@ axon start --host 0.0.0.0       # ещё и для устройств из се�
 
 ```bash
 axon code                                       # новый код подключения устройства
+axon doctor                                     # осмотр: что настроено и что сломано
 axon status                                     # запущено ли и где
 axon secret set provider.anthropic.apiKey sk-…  # ключ провайдера
 axon devices                                    # подключённые устройства
