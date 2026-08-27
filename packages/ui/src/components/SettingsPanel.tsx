@@ -16,6 +16,7 @@ import { THEMES, type ThemeId } from '../theme.js';
 import type { MotionId } from '../motion.js';
 import { Toggle } from './Panels.js';
 import { host } from '../host.js';
+import { checkForUpdate, dailyChecks, dueForCheck, setDailyChecks, type Release } from '../updates.js';
 
 /**
  * Настройки.
@@ -1598,6 +1599,87 @@ function LookPage({
   );
 }
 
+/**
+ * Обновления.
+ *
+ * Приложение раздаётся файлом — установщиком и APK не из магазина, — поэтому
+ * узнать о новой версии человеку неоткуда, кроме этой кнопки. Проверка идёт
+ * по нажатию, а раз в сутки — только если он сам разрешил: приложение,
+ * которое ходит в сеть без спроса, противоречит всему остальному здесь.
+ */
+function UpdateSection() {
+  const [state, setState] = useState<'idle' | 'checking' | 'fresh'>('idle');
+  const [found, setFound] = useState<Release | null>(null);
+  const [daily, setDaily] = useState(dailyChecks);
+
+  const check = async (): Promise<void> => {
+    setState('checking');
+    const release = await checkForUpdate(host().app.version);
+    setFound(release);
+    setState(release ? 'idle' : 'fresh');
+  };
+
+  // Раз в сутки — если разрешили. Ответ показывается там же, где и по кнопке:
+  // окно, само выскакивающее поверх работы, раздражает сильнее, чем помогает.
+  useEffect(() => {
+    if (dueForCheck()) void check();
+  }, []);
+
+  return (
+    <Section
+      title="Обновления"
+      icon="bi-arrow-down-circle"
+      hint="Приложение не из магазина, поэтому о новых версиях сообщать некому. В запросе нет ничего, кроме адреса: ни токена, ни сведений о вас."
+    >
+      {found ? (
+        <div className="rounded-xl2 border border-accent/40 bg-accent/10 p-3">
+          <p className="text-[13px] font-medium">Есть версия {formatVersion(found.version)}</p>
+          <p className="mt-1 text-[11px] text-text-muted">
+            У вас {formatVersion(host().app.version)}.
+          </p>
+          <a
+            href={found.url}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-2.5 inline-flex h-9 px-4 rounded-xl2 bg-accent text-accent-fg hover:bg-accent-hover text-[13px] font-medium items-center gap-2 transition-colors"
+          >
+            <i className="bi bi-box-arrow-up-right" />
+            Открыть страницу выпуска
+          </a>
+        </div>
+      ) : (
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            disabled={state === 'checking'}
+            onClick={() => void check()}
+            className="h-9 px-4 rounded-xl2 border border-border text-[13px] text-text-muted hover:bg-bg-hover hover:text-text transition-colors disabled:opacity-40"
+          >
+            {state === 'checking' ? 'Проверяю…' : 'Проверить'}
+          </button>
+          {state === 'fresh' && (
+            <span className="text-[12px] text-success flex items-center gap-1.5">
+              <i className="bi bi-check-circle-fill" />
+              У вас последняя
+            </span>
+          )}
+        </div>
+      )}
+
+      <Switch
+        label="Проверять раз в сутки"
+        hint="Один запрос в день при запуске приложения. Выключено — значит проверка только по кнопке."
+        on={daily}
+        onToggle={() => {
+          const next = !daily;
+          setDailyChecks(next);
+          setDaily(next);
+        }}
+      />
+    </Section>
+  );
+}
+
 function AboutPage({
   client,
   connection,
@@ -1628,6 +1710,8 @@ function AboutPage({
           <Row label="Идентификатор ядра" value={core?.coreId ?? '—'} mono />
         </dl>
       </Section>
+
+      <UpdateSection />
 
       <Section
         title="Первоначальная настройка"

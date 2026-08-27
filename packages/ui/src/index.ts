@@ -34,4 +34,6 @@ export type { UserDecision } from './components/PermissionModal.js';
 export { DevicesPanel, Empty, MemoryPanel, ToolsPanel, UsagePanel } from './components/Panels.js';
 export type { Screen } from './components/Sidebar.js';
 export { useMotion } from './motion.js';
+export { checkForUpdate, dailyChecks, dueForCheck, setDailyChecks } from './updates.js';
+export type { Release } from './updates.js';
 export type { MotionId } from './motion.js';
