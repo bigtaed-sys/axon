@@ -364,11 +364,11 @@ function Editor({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-6"
+      className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-2 sm:p-6"
       onClick={onCancel}
     >
       <div
-        className="card w-full max-w-2xl max-h-[88vh] overflow-y-auto scrollbar p-5 rise"
+        className="card w-full max-w-2xl max-h-[92vh] sm:max-h-[88vh] overflow-y-auto scrollbar p-3.5 sm:p-5 rise"
         onClick={(e) => e.stopPropagation()}
       >
         <h3 className="text-[15px] font-semibold mb-4">

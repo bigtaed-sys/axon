@@ -115,7 +115,7 @@ function Welcome({ persona, onSuggest }: { persona: Persona; onSuggest: (text: s
       <p className="mt-2 text-[13px] text-text-muted max-w-sm leading-relaxed">
         Ядро работает рядом и хранит всё у вас.
       </p>
-      <div className="mt-8 grid grid-cols-2 gap-2 max-w-lg w-full">
+      <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-lg w-full">
         <HintCard icon="bi-folder2-open" text="«покажи, что лежит в папке проекта»" />
         <HintCard icon="bi-shield-check" text="опасные действия — только с подтверждением" />
         <HintCard icon="bi-speedometer2" text="бюджет токенов на каждый ответ" />

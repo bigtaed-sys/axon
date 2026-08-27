@@ -491,7 +491,7 @@ function OwnDialog({ client, onClose }: { client: AxonClient; onClose: () => voi
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-6"
+      className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-2 sm:p-6"
       onClick={onClose}
     >
       <div className="card w-full max-w-xl rise" onClick={(e) => e.stopPropagation()}>
@@ -937,11 +937,11 @@ function PluginSettings({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-6"
+      className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-2 sm:p-6"
       onClick={onClose}
     >
       <div
-        className="card w-full max-w-xl max-h-[80vh] flex flex-col rise"
+        className="card w-full max-w-xl max-h-[92vh] sm:max-h-[80vh] flex flex-col rise"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2.5 px-5 pt-5 pb-3">
@@ -1095,7 +1095,7 @@ function SetupDialog({
   const ready = entry.setup.every((field) => !field.required || values[field.key]?.trim());
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2 sm:p-6">
       <div className="card w-full max-w-md p-5 rise">
         <div className="flex items-center gap-2.5 mb-1">
           <i className="bi bi-box-seam text-accent" />

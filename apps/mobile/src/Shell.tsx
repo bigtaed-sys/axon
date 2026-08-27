@@ -62,10 +62,6 @@ const MORE: Section[] = [
   { id: 'connect', label: 'Ядро', icon: 'bi-hdd-rack' },
 ];
 
-const TITLES: Partial<Record<Screen, string>> = Object.fromEntries(
-  [...ISLAND, ...MORE].map((section) => [section.id, section.label]),
-);
-
 /** Порядок разделов слева направо — по нему выбирается сторона перехода. */
 const ORDER: Screen[] = [...ISLAND.map((s) => s.id), ...MORE.map((s) => s.id)];
 
@@ -152,9 +148,6 @@ export function Shell() {
           'flex-1 min-h-0 flex flex-col',
           forward ? 'slide-from-right' : 'slide-from-left',
           !typing && 'under-island',
-          // Разделы кроме чата начинаются под шапкой: подсовывать заголовок
-          // панели под островок незачем, читать его там нечем.
-          screen !== 'chat' && 'pt-12',
         )}
       >
         <Body app={app} onOpenChats={() => setChats(true)} />
@@ -246,7 +239,14 @@ function Header({
   onOpenChats: () => void;
   onOpenContext: () => void;
 }) {
-  const chat = app.screen === 'chat';
+  /**
+   * Вне разговора шапки нет вовсе.
+   *
+   * Раздел называет себя сам — заголовком панели, и повторять его островком
+   * значит занять полтора сантиметра экрана надписью, которая уже есть строкой
+   * ниже. В разговоре островок остаётся: там он не подпись, а переключатель.
+   */
+  if (app.screen !== 'chat') return null;
 
   return (
     <header className="header-float absolute inset-x-0 top-0 z-20 h-12 flex items-center justify-center px-3">
@@ -257,27 +257,24 @@ function Header({
       */}
       <button
         type="button"
-        disabled={!chat}
         onClick={onOpenChats}
         // `relative` не для положения, а для порядка отрисовки: затемнение под
         // шапкой лежит абсолютным слоем и без этого красит сам островок.
         className="tap relative max-w-[70%] h-9 px-4 rounded-full bg-surface-high border border-border flex items-center gap-2 text-[13px] font-medium shadow-soft"
       >
-        {chat && <i className="bi bi-chat-dots-fill text-accent text-[11px] shrink-0" />}
-        <span className="truncate">{chat ? app.activeTitle : (TITLES[app.screen] ?? 'Axon')}</span>
-        {chat && <i className="bi bi-chevron-down text-text-dim text-[9px] shrink-0" />}
+        <i className="bi bi-chat-dots-fill text-accent text-[11px] shrink-0" />
+        <span className="truncate">{app.activeTitle}</span>
+        <i className="bi bi-chevron-down text-text-dim text-[9px] shrink-0" />
       </button>
 
-      {chat && (
-        <button
-          type="button"
-          onClick={onOpenContext}
-          title="Во что обходится контекст"
-          className="tap absolute right-3 w-9 h-9 rounded-full bg-surface-high border border-border flex items-center justify-center"
-        >
-          <i className="bi bi-eye text-[13px] text-text-muted" />
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={onOpenContext}
+        title="Во что обходится контекст"
+        className="tap absolute right-3 w-9 h-9 rounded-full bg-surface-high border border-border flex items-center justify-center"
+      >
+        <i className="bi bi-eye text-[13px] text-text-muted" />
+      </button>
     </header>
   );
 }

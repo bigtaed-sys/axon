@@ -60,17 +60,43 @@ export function Screen({
 }) {
   return (
     <div className="flex-1 overflow-y-auto scrollbar">
-      <div className={clsx('mx-auto px-6 py-6', WIDTH[width])}>
-        <div className="flex items-center gap-2.5 mb-1">
+      {/*
+        Поля на телефоне уже: двадцать четыре пикселя с каждой стороны на
+        экране в триста шестьдесят — это тринадцать процентов ширины, отданных
+        пустоте.
+      */}
+      <div className={clsx('mx-auto px-3 py-4 sm:px-6 sm:py-6', WIDTH[width])}>
+        <div className="flex items-center gap-2.5 mb-1 flex-wrap">
           <i className={clsx('bi', icon, 'text-lg text-accent')} />
           <h2 className="text-[17px] font-semibold tracking-tight">{title}</h2>
-          {tabs && <div className="flex-1 flex justify-center">{tabs}</div>}
+          {/*
+            На узком экране разделы переезжают на свою строку: в один ряд с
+            названием и кнопкой они сжимаются до нечитаемого.
+          */}
+          {tabs && (
+            <div className="order-last w-full flex justify-start overflow-x-auto scrollbar sm:order-none sm:w-auto sm:flex-1 sm:justify-center sm:overflow-visible">
+              {tabs}
+            </div>
+          )}
+          {/*
+            Кнопки и поиск на телефоне тоже уезжают на свою строку: рядом с
+            названием им остаётся полтора сантиметра.
+          */}
           {actions && (
-            <div className={clsx('flex items-center gap-2', !tabs && 'ml-auto')}>{actions}</div>
+            <div
+              className={clsx(
+                'flex items-center gap-2 w-full order-last sm:w-auto sm:order-none',
+                !tabs && 'sm:ml-auto',
+              )}
+            >
+              {actions}
+            </div>
           )}
         </div>
         {hint && (
-          <p className="text-[12px] text-text-muted mb-5 leading-relaxed max-w-2xl">{hint}</p>
+          <p className="text-[12px] text-text-muted mb-4 sm:mb-5 leading-relaxed max-w-2xl">
+            {hint}
+          </p>
         )}
         {!hint && <div className="mb-5" />}
         {children}
@@ -503,7 +529,7 @@ export function ToolsPanel({
       width="wide"
       hint="Выключенный инструмент не попадает в контекст модели — она о нём просто не знает и не тратит на него токены."
       actions={
-        <div className="relative w-56">
+        <div className="relative w-full sm:w-56">
           <i className="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-text-dim pointer-events-none" />
           <input
             value={query}
@@ -666,7 +692,7 @@ export function UsagePanel({ client }: { client: AxonClient }) {
 
   return (
     <Screen title="Расход за сегодня" icon="bi-graph-up">
-      <div className="grid grid-cols-4 gap-2 mb-5">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-5">
         <Stat icon="bi-play-circle" label="прогонов" value={String(summary.runs)} />
         <Stat icon="bi-box-arrow-in-right" label="на входе" value={compact(summary.inputTokens)} />
         <Stat icon="bi-box-arrow-right" label="на выходе" value={compact(summary.outputTokens)} />

@@ -46,11 +46,11 @@ export function ContextReport({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-6 animate-fade-in"
+      className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-2 sm:p-6 animate-fade-in"
       onClick={onClose}
     >
       <div
-        className="card w-full max-w-lg max-h-[80vh] flex flex-col rise"
+        className="card w-full max-w-lg max-h-[92vh] sm:max-h-[80vh] flex flex-col rise"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start gap-3 p-5 pb-3">
