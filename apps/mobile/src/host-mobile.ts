@@ -1,4 +1,5 @@
 import { setHost, type Connection, type CoreProbe } from '@axon/ui';
+import { notify } from './notify.js';
 
 /**
  * Хозяин окна на телефоне.
@@ -58,6 +59,7 @@ function normalize(input: string): string {
 export function installMobileHost(app: { version: string; builtAt: string }): void {
   setHost({
     app,
+    notify,
 
     connection: async () => ({ connection: load(), error: null }),
 

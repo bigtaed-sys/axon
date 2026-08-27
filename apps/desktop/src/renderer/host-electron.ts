@@ -54,6 +54,16 @@ export function installElectronHost(): boolean {
       setAutostart: (enable) => bridge.setAutostart(enable),
     },
 
+    /**
+     * Уведомление рисует сам Chromium: в Electron это настоящее системное
+     * окошко, и разрешение спрашивается один раз при первой попытке.
+     */
+    notify: ({ title, body, silent }) => {
+      if (Notification.permission === 'default') void Notification.requestPermission();
+      if (Notification.permission !== 'granted') return;
+      new Notification(title, { body, ...(silent === undefined ? {} : { silent }) });
+    },
+
     ...(bridge.titlebar ? { titlebar: (colors) => void bridge.titlebar?.(colors) } : {}),
     ...(bridge.pickFolder ? { pickFolder: () => bridge.pickFolder!() } : {}),
   });

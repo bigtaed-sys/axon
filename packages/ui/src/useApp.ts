@@ -135,9 +135,7 @@ function notifyFinished(routine: Routine): void {
 }
 
 function notify(title: string, body: string, silent = false): void {
-  if (Notification.permission === 'default') void Notification.requestPermission();
-  if (Notification.permission !== 'granted') return;
-  new Notification(title, { body, silent });
+  host().notify?.({ title, body, silent });
 }
 
 /** Первая строка сообщения — достаточно хороший заголовок, и он бесплатный. */
