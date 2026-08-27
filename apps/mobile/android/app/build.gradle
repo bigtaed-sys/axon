@@ -1,5 +1,18 @@
 apply plugin: 'com.android.application'
 
+/**
+ * Ключ подписи.
+ *
+ * Лежит вне репозитория и подхватывается, если он есть. Без него собирается
+ * только отладочная сборка — выпускать неподписанное всё равно нельзя, а
+ * падать на сборке у того, кто просто хочет посмотреть приложение, незачем.
+ */
+def signingProperties = new Properties()
+def signingFile = rootProject.file('../signing/keystore.properties')
+if (signingFile.exists()) {
+    signingFile.withInputStream { signingProperties.load(it) }
+}
+
 android {
     namespace "dev.axon.mobile"
     compileSdk rootProject.ext.compileSdkVersion
@@ -19,8 +32,22 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (signingProperties['storeFile']) {
+                storeFile file(signingProperties['storeFile'])
+                storePassword signingProperties['storePassword']
+                keyAlias signingProperties['keyAlias']
+                keyPassword signingProperties['keyPassword']
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (signingProperties['storeFile']) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

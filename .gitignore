@@ -35,4 +35,7 @@ apps/mobile/android/capacitor-cordova-android-plugins/build/
 apps/mobile/android/.gradle/
 apps/mobile/android/local.properties
 apps/mobile/Axon-*.apk
+# Ключ подписи приложения и пароль от него. Потерять их нельзя, а положить
+# сюда — тем более: право выпускать приложение от нашего имени это и есть ключ.
+apps/mobile/signing/
 apps/mobile/android/app/src/main/assets/public/

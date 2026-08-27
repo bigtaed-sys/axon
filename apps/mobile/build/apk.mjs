@@ -55,14 +55,31 @@ run('npx', ['cap', 'sync', 'android']);
 // рабочей папке, и «gradlew.bat не является внутренней командой» — это оно.
 const gradle = path.join(android, process.platform === 'win32' ? 'gradlew.bat' : 'gradlew');
 
-execFileSync(gradle, ['assembleDebug'], {
+/**
+ * Подписанный релиз, если ключ заведён.
+ *
+ * Отладочная сборка годится посмотреть, но не годится раздавать: обновление,
+ * подписанное другим ключом, Android не поставит поверх — только сносом
+ * приложения вместе с данными.
+ */
+const signed = fs.existsSync(path.join(root, 'signing/keystore.properties'));
+const task = signed ? 'assembleRelease' : 'assembleDebug';
+
+if (!signed) {
+  console.warn('Ключа подписи нет — собираю отладочную сборку.');
+  console.warn('Для раздачи нужен ключ: npm run keystore --workspace @axon/mobile\n');
+}
+
+execFileSync(gradle, [task], {
   cwd: android,
   stdio: 'inherit',
   shell: process.platform === 'win32',
   env: { ...process.env, AXON_VERSION: version, AXON_VERSION_CODE: String(code) },
 });
 
-const apk = path.join(android, 'app/build/outputs/apk/debug/app-debug.apk');
+const apk = signed
+  ? path.join(android, 'app/build/outputs/apk/release/app-release.apk')
+  : path.join(android, 'app/build/outputs/apk/debug/app-debug.apk');
 const named = path.join(root, `Axon-${version}.apk`);
 fs.copyFileSync(apk, named);
 
